@@ -35,6 +35,13 @@ SUBSCRIBE /user/queue/chat/errors
 - 메시지 저장, 권한 검증, Redis Stream publish는 application service에서 처리한다.
 - `SimpMessagingTemplate` 직접 사용은 outbound adapter 또는 application service 경계로 제한한다.
 
+## Package Structure
+
+- STOMP `@MessageMapping` controller는 REST controller와 구분해 `api.stomp` 또는 기능별 `api` 하위 패키지에 둔다.
+- STOMP request/event DTO는 REST DTO와 공유하지 않고 `dto.stomp` 또는 기능별 STOMP DTO 패키지에 둔다.
+- WebSocket/STOMP 인프라 코드는 단일 `websocket` 패키지에 몰아넣지 않고 책임별로 나눈다.
+- 기본 하위 패키지는 `websocket.config`, `websocket.handshake`, `websocket.security`, `websocket.connection`, `websocket.error`를 사용한다.
+
 ## Authentication and Authorization
 
 - CONNECT 단계에서 인증 정보를 검증한다.

@@ -15,6 +15,24 @@
 - DTO, Entity 노출, 운영 로그, metrics, tracing, health check 같은 프로젝트 공통 기준을 점검할 때
 - 어떤 세부 rule을 적용해야 할지 애매한 기본 설계 판단이 필요할 때
 
+## Git Commit 규칙
+
+커밋의 경우 각 접두사에 맞게, 기능별로 쪼개어 커밋한다.
+
+- `[FEAT]` : Feature, 새로운 기능 추가
+- `[FIX]` : Fix, 버그 수정
+- `[REFACTOR]` : Refactor, 기능 변경 없이 코드 구조 개선
+- `[DOCS]` : Documentation, 문서 작성 및 수정
+- `[TEST]` : Test, 테스트 코드 추가 및 수정
+- `[CHORE]` : Chore, 기타 유지보수 작업 (설정, 빌드, 의존성 등)
+- `[BUILD]` : Build, 빌드 시스템 및 의존성 변경
+- `[CI]` : Continuous Integration, CI/CD 설정 변경
+- `[PERF]` : Performance, 성능 개선
+- `[SECURITY]` : Security, 보안 관련 수정 및 개선
+- `[HOTFIX]` : Hotfix, 운영 환경 긴급 수정
+- `[DB]` : Database, 데이터베이스 스키마 및 쿼리 변경
+- `[INFRA]` : Infrastructure, 서버 및 인프라 관련 작업
+
 ## 기능 완료 문서화
 
 기능 추가, 기능 변경, 비즈니스 로직 변경, API/이벤트/Redis/JPA 계약 변경이 포함된 작업을 완료할 때는 반드시 관련 문서를 작성하거나 갱신한다.

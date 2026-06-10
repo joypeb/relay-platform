@@ -49,7 +49,9 @@ com.example.<service>
 
 ## 예외
 
-- 단일 gateway 또는 edge service처럼 도메인 모델이 없는 서비스는 `api`, `config`, `filter`, `client` 구조를 사용할 수 있다.
+- 단일 gateway 또는 edge service처럼 도메인 모델이 없는 서비스는 `api`, `config`, `filter`, `client`, `session`, `websocket` 중심 구조를 사용할 수 있다.
+- gateway가 REST와 STOMP adapter를 함께 제공하면 `api.rest`, `api.stomp`, `dto.rest`, `dto.stomp`처럼 transport별 하위 패키지로 분리한다.
+- gateway의 WebSocket/STOMP 인프라는 `websocket.config`, `websocket.handshake`, `websocket.security`, `websocket.connection`, `websocket.error`처럼 protocol 책임별 하위 패키지로 분리한다.
 - 아주 작은 설정 전용 모듈은 기능 중심 패키지를 생략할 수 있다.
 
 ## 점검 기준
