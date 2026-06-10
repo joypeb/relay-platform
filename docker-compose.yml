@@ -1,0 +1,64 @@
+services:
+  gateway:
+    build:
+      context: ./gateway
+      dockerfile: Dockerfile
+    image: redis-chat-test-gateway:${GATEWAY_IMAGE_TAG:-local}
+    container_name: ${COMPOSE_PROJECT_NAME:-redis-chat-test}-gateway
+    ports:
+      - "${GATEWAY_HOST_PORT:-8080}:${GATEWAY_CONTAINER_PORT:-8080}"
+    environment:
+      SERVER_PORT: ${GATEWAY_CONTAINER_PORT:-8080}
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-local}
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: ${REDIS_PORT:-6379}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-redis_chat}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-redis_chat}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-redis_chat_password}
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:${GATEWAY_CONTAINER_PORT:-8080}/actuator/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
+
+  redis:
+    image: redis:7
+    container_name: ${COMPOSE_PROJECT_NAME:-redis-chat-test}-redis
+    ports:
+      - "${REDIS_HOST_PORT:-6379}:${REDIS_PORT:-6379}"
+    command: ["redis-server", "--appendonly", "yes", "--port", "${REDIS_PORT:-6379}"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "${REDIS_PORT:-6379}", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  postgres:
+    image: postgres:17
+    container_name: ${COMPOSE_PROJECT_NAME:-redis-chat-test}-postgres
+    ports:
+      - "${POSTGRES_HOST_PORT:-5432}:${POSTGRES_PORT:-5432}"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-redis_chat}
+      POSTGRES_USER: ${POSTGRES_USER:-redis_chat}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-redis_chat_password}
+      PGPORT: ${POSTGRES_PORT:-5432}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB} -p $${PGPORT}"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  redis-data:
+  postgres-data:

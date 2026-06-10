@@ -5,6 +5,9 @@
 # Log file
 *.log
 
+# Local environment variables
+.env
+
 # BlueJ files
 *.ctxt
 
@@ -241,4 +244,3 @@ Icon
 Network Trash Folder
 Temporary Items
 .apdisk
-
