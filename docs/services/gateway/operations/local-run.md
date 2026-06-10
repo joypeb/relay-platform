@@ -30,6 +30,7 @@ docker compose up --build
 기본 외부 포트:
 
 - gateway: `8080`
+- chat-service base URL: `http://host.docker.internal:8081`
 - Redis: `6379`
 - PostgreSQL: `5432`
 
@@ -37,6 +38,7 @@ gateway 컨테이너에는 다음 Spring 환경 변수가 주입된다.
 
 - `SERVER_PORT`
 - `SPRING_PROFILES_ACTIVE`
+- `CHAT_SERVICE_BASE_URL`
 - `SPRING_DATA_REDIS_HOST`
 - `SPRING_DATA_REDIS_PORT`
 - `SPRING_DATASOURCE_URL`
@@ -53,8 +55,10 @@ gateway 컨테이너에는 다음 Spring 환경 변수가 주입된다.
 
 ```bash
 cd gateway
-./gradlew bootRun
+CHAT_SERVICE_BASE_URL=http://localhost:8081 ./gradlew bootRun
 ```
+
+`CHAT_SERVICE_BASE_URL`을 지정하지 않으면 gateway는 기본적으로 `http://localhost:8081`의 chat-service를 호출한다.
 
 ## Test
 
@@ -72,5 +76,6 @@ cd gateway
 
 ### External Dependency Connection Fails
 
+- chat-service: `CHAT_SERVICE_BASE_URL`이 실행 중인 chat-service 주소와 일치하는지 확인한다.
 - Redis: `docker compose logs redis`, `docker compose exec redis redis-cli ping`
 - PostgreSQL: `docker compose logs postgres`, `docker compose exec postgres pg_isready -U redis_chat -d redis_chat`
