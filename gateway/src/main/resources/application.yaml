@@ -1,3 +1,14 @@
 spring:
   application:
     name: gateway
+
+gateway:
+  websocket:
+    allowed-origin-patterns:
+      - "*"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
