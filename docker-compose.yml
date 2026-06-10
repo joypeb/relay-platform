@@ -10,6 +10,7 @@ services:
     environment:
       SERVER_PORT: ${GATEWAY_CONTAINER_PORT:-8080}
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-local}
+      CHAT_SERVICE_BASE_URL: ${CHAT_SERVICE_BASE_URL:-http://host.docker.internal:8081}
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: ${REDIS_PORT:-6379}
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-redis_chat}
