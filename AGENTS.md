@@ -21,10 +21,12 @@
 
 문서 위치 기준:
 
-- 기능 단위 설명: `docs/features/<feature-slug>.md`
-- 아키텍처/서비스 경계 변경: `docs/architecture/*.md`
-- 중요한 설계 결정: `docs/adr/YYYY-MM-DD-<decision-slug>.md`
-- 실행, 운영, 장애 대응 변경: `docs/operations/*.md`
+- 서비스별 기능 설명: `docs/services/<service-name>/features/<feature-slug>.md`
+- 서비스별 내부 구조: `docs/services/<service-name>/architecture/*.md`
+- 서비스별 실행, 운영, 장애 대응: `docs/services/<service-name>/operations/*.md`
+- 서비스별 설계 결정: `docs/services/<service-name>/adr/YYYY-MM-DD-<decision-slug>.md`
+- 여러 서비스에 걸친 아키텍처/서비스 경계 변경: `docs/architecture/*.md`
+- 여러 서비스에 영향을 주는 중요한 설계 결정: `docs/adr/YYYY-MM-DD-<decision-slug>.md`
 
 문서에는 최소한 다음 내용을 포함한다.
 
@@ -40,8 +42,9 @@
 작업 완료 전 체크리스트:
 
 - 코드 변경과 문서 내용이 일치하는지 확인한다.
-- 새 기능이면 `docs/features/`에 문서를 추가한다.
+- 새 기능이면 해당 서비스의 `docs/services/<service-name>/features/`에 문서를 추가한다.
 - 기존 기능 변경이면 기존 문서를 갱신한다.
+- 변경이 여러 서비스에 걸치면 각 서비스 문서를 갱신하고, 서비스 간 흐름은 `docs/architecture/` 또는 전역 ADR에 별도로 남긴다.
 - 최종 응답에 작성/수정한 문서 경로를 포함한다.
 - 문서화가 불필요한 단순 변경이면 그 이유를 최종 응답에 짧게 밝힌다.
 

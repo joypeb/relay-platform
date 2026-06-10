@@ -6,10 +6,12 @@
 
 ## Directory Structure
 
-- `features/`: 기능 단위 문서. 기능의 목적, 처리 흐름, 핵심 로직, 관련 코드를 설명한다.
-- `architecture/`: 서비스 경계, 모듈 구조, 시스템 흐름 같은 아키텍처 문서.
-- `adr/`: 중요한 설계 결정을 남기는 Architecture Decision Record.
-- `operations/`: 로컬 실행, 배포, 장애 대응, 트러블슈팅 문서.
+- `services/<service-name>/`: 서비스별 문서. 기능, 내부 구조, 서비스 전용 ADR, 운영 문서를 포함한다.
+- `services/_template/`: 새 서비스 문서 디렉터리를 만들 때 사용하는 템플릿.
+- `architecture/`: 여러 서비스에 걸친 시스템 흐름, 서비스 경계, 통신 방식 같은 전역 아키텍처 문서.
+- `adr/`: 여러 서비스에 영향을 주는 중요한 설계 결정을 남기는 전역 Architecture Decision Record.
+
+서비스가 별도 프로젝트로 분리되어 있어도 같은 구조를 각 서비스 저장소에 둘 수 있다. 이 저장소에서는 현재 `gateway` 서비스를 `services/gateway/` 아래에 문서화한다.
 
 ## When To Update
 
@@ -34,4 +36,4 @@
 7. 테스트 및 검증 방법
 8. 설계 결정과 trade-off
 
-새 기능 문서는 `features/_template.md`를 복사해 작성한다.
+서비스별 새 기능 문서는 `services/<service-name>/features/_template.md`를 복사해 작성한다. 새 서비스가 추가되면 `services/_template/` 디렉터리를 복사해 `services/<service-name>/`을 만든다.

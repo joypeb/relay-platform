@@ -2,12 +2,13 @@
 
 이 문서는 프로젝트의 전체 구조와 서비스 경계를 설명한다.
 
-현재 프로젝트는 `gateway` 모듈을 중심으로 구성되어 있다. 세부 기능이 추가될 때마다 서비스 경계, 요청 흐름, 외부 시스템 연동 방식이 이 문서 또는 별도 아키텍처 문서에 갱신되어야 한다.
+현재 프로젝트는 `gateway` 서비스를 포함한다. 서비스별 내부 구조와 기능은 `docs/services/<service-name>/` 아래에 작성하고, 이 문서는 여러 서비스에 걸친 경계와 통신 흐름만 기록한다.
 
 ## Modules
 
 ### gateway
 
+- 서비스 문서: `docs/services/gateway/README.md`
 - 역할:
 - 주요 책임:
 - 외부에 노출하는 계약:
@@ -24,6 +25,5 @@
 
 ## Related Documents
 
-- `docs/features/`
+- `docs/services/`
 - `docs/adr/`
-- `docs/operations/`

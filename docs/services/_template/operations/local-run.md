@@ -1,6 +1,6 @@
 # Local Run
 
-로컬 실행과 검증 절차를 기록하는 문서다.
+서비스 로컬 실행과 검증 절차를 기록하는 문서다.
 
 ## Prerequisites
 
@@ -10,17 +10,15 @@
 - Redis:
 - PostgreSQL:
 
-## Run Gateway
+## Run
 
 ```bash
-cd gateway
 ./gradlew bootRun
 ```
 
 ## Test
 
 ```bash
-cd gateway
 ./gradlew test
 ```
 
