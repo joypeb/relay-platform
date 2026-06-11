@@ -3,6 +3,8 @@ spring:
     name: gateway
 
 gateway:
+  chat-service:
+    base-url: ${CHAT_SERVICE_BASE_URL:http://localhost:8081}
   websocket:
     allowed-origin-patterns:
       - "*"

@@ -1,8 +1,8 @@
-# Local Session And STOMP Gateway
+# Local Session, Chat Room REST, And STOMP Gateway
 
 ## 기능 목적
 
-gateway는 개발과 테스트를 위해 `userId`만 받는 로컬 로그인 세션을 제공하고, 인증된 세션만 WebSocket/STOMP에 연결되도록 관리한다. 이 기능은 실제 auth 서비스가 도입되기 전까지 gateway 진입점, principal 전파, STOMP destination 정책을 먼저 고정하기 위한 임시 edge 기능이다.
+gateway는 개발과 테스트를 위해 `userId`만 받는 로컬 로그인 세션을 제공하고, 인증된 세션만 chat-service REST API와 WebSocket/STOMP에 접근하도록 관리한다. 이 기능은 실제 auth 서비스가 도입되기 전까지 gateway 진입점, principal 전파, REST routing, STOMP destination 정책을 먼저 고정하기 위한 임시 edge 기능이다.
 
 ## 전체 처리 흐름
 
@@ -21,6 +21,16 @@ gateway는 개발과 테스트를 위해 `userId`만 받는 로컬 로그인 세
 4. `StompAuthenticationChannelInterceptor`가 STOMP `CONNECT`, `SUBSCRIBE`, `SEND` frame의 인증과 destination prefix를 확인한다.
 5. `StompSessionEventListener`가 connect/disconnect 이벤트를 `StompConnectionRegistry`에 반영한다.
 6. 연결 검증용 `SEND /app/gateway/acks`는 `/user/queue/gateway/acks`로 사용자별 ACK 이벤트를 반환한다.
+
+### 채팅방 REST Routing
+
+1. 클라이언트가 gateway 세션 cookie를 포함해 `POST|GET|PATCH|DELETE /api/v1/chat-rooms...`를 호출한다.
+2. Spring Cloud Gateway Server MVC route가 `/api/v1/chat-rooms`와 `/api/v1/chat-rooms/**`를 매칭한다.
+3. `ChatServiceGatewayRouteConfig`의 filter가 servlet session에서 `AUTHENTICATED_USER_ID`를 조회한다.
+4. 인증 정보가 없으면 chat-service를 호출하지 않고 `401 UNAUTHENTICATED`를 반환한다.
+5. 인증 정보가 있으면 route target인 chat-service로 같은 path와 query string을 유지해 HTTP 요청을 전달한다.
+6. gateway는 session cookie를 제거하고, 클라이언트가 보낸 `X-User-Id`를 세션 사용자 ID로 덮어쓴다.
+7. chat-service 응답의 HTTP status, 주요 response header, body를 그대로 클라이언트에 반환한다.
 
 ```mermaid
 sequenceDiagram
@@ -41,11 +51,29 @@ sequenceDiagram
     STOMP-->>Client: MESSAGE /user/queue/gateway/acks
 ```
 
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Gateway
+    participant Session
+    participant ChatService as chat-service
+
+    Client->>Gateway: POST /api/v1/chat-rooms + session cookie
+    Gateway->>Gateway: match Spring Cloud Gateway MVC route
+    Gateway->>Session: read AUTHENTICATED_USER_ID
+    Gateway->>ChatService: POST /api/v1/chat-rooms + X-User-Id
+    ChatService-->>Gateway: 201 ApiResponse<ChatRoomResponse>
+    Gateway-->>Client: 201 ApiResponse<ChatRoomResponse>
+```
+
 ## 핵심 로직과 주요 분기
 
 - `LoginRequest.userId`는 blank, 64자 초과, 허용 문자 외 입력을 거부한다.
 - 현재 허용 문자는 영문, 숫자, `.`, `_`, `-`이다.
 - 세션이 없거나 `AUTHENTICATED_USER_ID`가 없으면 현재 세션 조회는 `401 Unauthorized`를 반환한다.
+- 세션이 없거나 `AUTHENTICATED_USER_ID`가 없으면 chat-room REST routing도 `401 Unauthorized`를 반환한다.
+- gateway는 채팅방 생성, 목록, 상세, 수정, 삭제 API의 도메인 검증을 수행하지 않고 chat-service 응답을 중계한다.
+- chat-room REST route는 클라이언트가 보낸 `X-User-Id`를 신뢰하지 않고 gateway session 값을 downstream header로 사용한다.
 - WebSocket handshake에 인증 세션이 없으면 `401 Unauthorized`로 거부한다.
 - STOMP `SUBSCRIBE`는 `/topic/**`, `/user/queue/**`만 허용한다.
 - STOMP `SEND`는 `/app/**`만 허용한다.
@@ -55,6 +83,8 @@ sequenceDiagram
 
 - `/Users/parkeunbin/Desktop/project/redis-chat-test/gateway/src/main/java/com/joypeb/gateway/api/rest/SessionController.java`
 - `/Users/parkeunbin/Desktop/project/redis-chat-test/gateway/src/main/java/com/joypeb/gateway/api/rest/GatewayExceptionHandler.java`
+- `/Users/parkeunbin/Desktop/project/redis-chat-test/gateway/src/main/java/com/joypeb/gateway/config/ChatServiceGatewayRouteConfig.java`
+- `/Users/parkeunbin/Desktop/project/redis-chat-test/gateway/src/main/java/com/joypeb/gateway/config/ChatServiceProperties.java`
 - `/Users/parkeunbin/Desktop/project/redis-chat-test/gateway/src/main/java/com/joypeb/gateway/api/stomp/GatewayStompController.java`
 - `/Users/parkeunbin/Desktop/project/redis-chat-test/gateway/src/main/java/com/joypeb/gateway/websocket/config/WebSocketConfig.java`
 - `/Users/parkeunbin/Desktop/project/redis-chat-test/gateway/src/main/java/com/joypeb/gateway/websocket/handshake/GatewayHandshakeInterceptor.java`
@@ -74,6 +104,26 @@ sequenceDiagram
   - response: `200 OK` 또는 `401 Unauthorized`
 - `DELETE /api/v1/sessions/current`
   - response: `204 No Content`
+- `POST /api/v1/chat-rooms`
+  - gateway input: authenticated session cookie
+  - forwarded header: `X-User-Id: <session userId>`
+  - response: chat-service `201 Created` response
+- `GET /api/v1/chat-rooms?scope=public|joined&page=0&size=20`
+  - gateway input: authenticated session cookie
+  - forwarded header: `X-User-Id: <session userId>`
+  - response: chat-service `200 OK` response
+- `GET /api/v1/chat-rooms/{roomId}`
+  - gateway input: authenticated session cookie
+  - forwarded header: `X-User-Id: <session userId>`
+  - response: chat-service `200 OK` or error response
+- `PATCH /api/v1/chat-rooms/{roomId}`
+  - gateway input: authenticated session cookie
+  - forwarded header: `X-User-Id: <session userId>`
+  - response: chat-service `200 OK` or error response
+- `DELETE /api/v1/chat-rooms/{roomId}`
+  - gateway input: authenticated session cookie
+  - forwarded header: `X-User-Id: <session userId>`
+  - response: chat-service `204 No Content` or error response
 
 ### WebSocket/STOMP
 
@@ -88,11 +138,14 @@ sequenceDiagram
 ### 설정
 
 - `gateway.websocket.allowed-origin-patterns`: WebSocket handshake 허용 origin pattern 목록
+- `gateway.chat-service.base-url`: chat-service REST base URL. 기본값은 `CHAT_SERVICE_BASE_URL` 환경 변수이며, 미설정 시 `http://localhost:8081`을 사용한다.
 
 ## 실패 처리와 예외 상황
 
 - REST validation 실패는 `400 Bad Request`와 `REQUEST_VALIDATION_FAILED` code를 포함한 `ProblemDetail`로 응답한다.
 - 인증되지 않은 REST 현재 세션 조회는 `401 Unauthorized`와 `UNAUTHENTICATED` code를 반환한다.
+- 인증되지 않은 chat-room REST 호출은 route filter에서 중단되며 `401 Unauthorized`와 `UNAUTHENTICATED` code를 반환한다.
+- chat-service가 반환한 validation, not found, forbidden 같은 domain error response는 gateway가 상태 코드와 body를 보존해 반환한다.
 - 인증되지 않은 WebSocket handshake는 `401 Unauthorized`로 거부한다.
 - 인증되지 않았거나 허용되지 않은 STOMP destination 접근은 STOMP ERROR frame으로 응답한다.
 - 내부 예외 class name, stack trace, SQL, Redis command detail은 클라이언트에 노출하지 않는다.
@@ -100,6 +153,11 @@ sequenceDiagram
 ## 테스트 및 검증 방법
 
 - REST 세션 생성, validation 실패, 현재 세션 조회, 미인증 조회, 로그아웃은 `SessionControllerTest`에서 검증한다.
+- chat-room REST routing은 `ChatRoomGatewayRouteTest`에서 검증한다.
+  - 인증된 session으로 `POST /api/v1/chat-rooms` 호출 시 chat-service에 `X-User-Id`와 request body가 전달된다.
+  - 클라이언트가 임의로 보낸 `X-User-Id`와 session cookie는 chat-service로 전달되지 않는다.
+  - chat-service의 `201 Created`, `Location`, JSON body가 gateway 응답으로 반환된다.
+  - 인증되지 않은 chat-room REST 호출은 `401 UNAUTHENTICATED`로 거부된다.
 - WebSocket/STOMP는 `GatewayWebSocketIntegrationTest`에서 실제 random port로 검증한다.
 - 검증한 흐름:
   - 로그인 session cookie로 `/ws` 연결
@@ -117,6 +175,8 @@ sequenceDiagram
 
 - 테스트 편의를 위해 실제 인증 서비스 대신 gateway 로컬 servlet session을 사용한다. 이 방식은 단순하지만 gateway instance 간 session 공유가 없으므로 운영 인증 모델로 사용하지 않는다.
 - REST login URL은 동사형 `/login` 대신 resource 중심의 `POST /api/v1/sessions`로 정의했다.
+- chat-room REST routing은 수동 controller 대신 Spring Cloud Gateway Server MVC의 `RouterFunction`, `HandlerFunctions.http()`, route filter로 구현한다.
+- gateway는 채팅방 REST 요청에서 인증 사용자 ID를 header로 전파하되, 채팅방 소유권이나 멤버십 같은 도메인 판단은 chat-service에 남긴다.
 - gateway는 연결과 인증 경계만 담당하고, 채팅 메시지 저장과 Redis Stream publish는 이후 chat 서비스 책임으로 남긴다.
 - REST와 STOMP adapter, DTO, WebSocket/STOMP 인프라를 하위 패키지로 분리해 transport 계약과 protocol 인프라 책임이 섞이지 않도록 했다.
 - WebSocket origin은 설정으로 외부화했으며, 현재 로컬 개발 기본값은 `*`이다. 운영 환경에서는 명시적인 origin 목록으로 제한해야 한다.
