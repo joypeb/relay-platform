@@ -1,5 +1,6 @@
 package com.joypeb.chatservice.common.error;
 
+import com.joypeb.chatservice.chatroom.application.ChatRoomMemberAlreadyExistsException;
 import com.joypeb.chatservice.chatroom.application.ChatRoomForbiddenException;
 import com.joypeb.chatservice.chatroom.application.ChatRoomNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -31,6 +32,17 @@ public class ChatServiceExceptionHandler {
 		problem.setType(URI.create("https://joypeb.com/problems/chat-room-forbidden"));
 		problem.setProperty("code", "CHAT_ROOM_FORBIDDEN");
 		return ResponseEntity.status(HttpStatus.FORBIDDEN).body(problem);
+	}
+
+	@ExceptionHandler(ChatRoomMemberAlreadyExistsException.class)
+	public ResponseEntity<ProblemDetail> handleMemberAlreadyExists(
+		ChatRoomMemberAlreadyExistsException exception,
+		HttpServletRequest request
+	) {
+		ProblemDetail problem = problem(HttpStatus.CONFLICT, "Chat room member already exists", exception.getMessage(), request);
+		problem.setType(URI.create("https://joypeb.com/problems/chat-room-member-already-exists"));
+		problem.setProperty("code", "CHAT_ROOM_MEMBER_ALREADY_EXISTS");
+		return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
 	}
 
 	@ExceptionHandler({

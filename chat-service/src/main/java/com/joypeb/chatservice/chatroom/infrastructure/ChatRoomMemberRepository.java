@@ -7,4 +7,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface ChatRoomMemberRepository extends JpaRepository<ChatRoomMember, UUID> {
 
 	long countByRoomIdAndLeftAtIsNull(UUID roomId);
+
+	boolean existsByRoomIdAndMemberIdAndLeftAtIsNull(UUID roomId, String memberId);
 }

@@ -121,6 +121,62 @@ class ChatRoomControllerTest {
 	}
 
 	@Test
+	void inviteMemberAddsMemberToChatRoom() throws Exception {
+		String roomId = createRoom("user-1", "invite-room", false);
+
+		mockMvc.perform(post("/api/v1/chat-rooms/{roomId}/members", roomId)
+				.header(ACTOR_HEADER, "user-1")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{"memberId":"user-2"}
+					"""))
+			.andExpect(status().isCreated())
+			.andExpect(header().string("Location", "/api/v1/chat-rooms/" + roomId + "/members/user-2"))
+			.andExpect(jsonPath("$.success").value(true))
+			.andExpect(jsonPath("$.data.roomId").value(roomId))
+			.andExpect(jsonPath("$.data.memberId").value("user-2"))
+			.andExpect(jsonPath("$.data.role").value("MEMBER"));
+
+		mockMvc.perform(get("/api/v1/chat-rooms")
+				.param("scope", "joined")
+				.header(ACTOR_HEADER, "user-2"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.items", hasSize(1)))
+			.andExpect(jsonPath("$.data.items[0].id").value(roomId))
+			.andExpect(jsonPath("$.data.items[0].memberCount").value(2));
+	}
+
+	@Test
+	void inviteMemberRequiresOwner() throws Exception {
+		String roomId = createRoom("user-1", "owner-only-invite-room", false);
+
+		mockMvc.perform(post("/api/v1/chat-rooms/{roomId}/members", roomId)
+				.header(ACTOR_HEADER, "user-2")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{"memberId":"user-3"}
+					"""))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.code").value("CHAT_ROOM_FORBIDDEN"));
+	}
+
+	@Test
+	void inviteMemberRejectsAlreadyActiveMember() throws Exception {
+		String roomId = createRoom("user-1", "duplicate-invite-room", false);
+
+		inviteMember(roomId, "user-1", "user-2");
+
+		mockMvc.perform(post("/api/v1/chat-rooms/{roomId}/members", roomId)
+				.header(ACTOR_HEADER, "user-1")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{"memberId":"user-2"}
+					"""))
+			.andExpect(status().isConflict())
+			.andExpect(jsonPath("$.code").value("CHAT_ROOM_MEMBER_ALREADY_EXISTS"));
+	}
+
+	@Test
 	void deleteChatRoomHidesRoomFromDetail() throws Exception {
 		String roomId = createRoom("user-1", "delete-me", true);
 
@@ -145,5 +201,15 @@ class ChatRoomControllerTest {
 			.getResponse()
 			.getContentAsString();
 		return objectMapper.readTree(response).path("data").path("id").asText();
+	}
+
+	private void inviteMember(String roomId, String ownerId, String memberId) throws Exception {
+		mockMvc.perform(post("/api/v1/chat-rooms/{roomId}/members", roomId)
+				.header(ACTOR_HEADER, ownerId)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{"memberId":"%s"}
+					""".formatted(memberId)))
+			.andExpect(status().isCreated());
 	}
 }

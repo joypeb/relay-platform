@@ -104,6 +104,12 @@ public class ChatRoom {
 		this.updatedAt = deletedAt;
 	}
 
+	public ChatRoomMember inviteMember(String actorId, String memberId, Instant joinedAt) {
+		requireOwner(actorId);
+		requireActive();
+		return ChatRoomMember.member(id, memberId, joinedAt);
+	}
+
 	private void requireOwner(String actorId) {
 		if (!Objects.equals(ownerId, actorId)) {
 			throw new ChatRoomForbiddenException();

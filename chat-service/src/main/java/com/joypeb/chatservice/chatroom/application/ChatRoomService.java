@@ -5,6 +5,8 @@ import com.joypeb.chatservice.chatroom.domain.ChatRoom;
 import com.joypeb.chatservice.chatroom.domain.ChatRoomMember;
 import com.joypeb.chatservice.chatroom.domain.ChatRoomVisibility;
 import com.joypeb.chatservice.chatroom.dto.ChatRoomCreateRequest;
+import com.joypeb.chatservice.chatroom.dto.ChatRoomMemberInviteRequest;
+import com.joypeb.chatservice.chatroom.dto.ChatRoomMemberResponse;
 import com.joypeb.chatservice.chatroom.dto.ChatRoomResponse;
 import com.joypeb.chatservice.chatroom.dto.ChatRoomSummaryResponse;
 import com.joypeb.chatservice.chatroom.dto.ChatRoomUpdateRequest;
@@ -14,6 +16,7 @@ import com.joypeb.chatservice.common.api.PageResponse;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.UUID;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -76,6 +79,21 @@ public class ChatRoomService {
 	}
 
 	@Transactional
+	public ChatRoomMemberResponse inviteMember(String actorId, UUID roomId, ChatRoomMemberInviteRequest request) {
+		ChatRoom room = findActiveRoom(roomId);
+		if (chatRoomMemberRepository.existsByRoomIdAndMemberIdAndLeftAtIsNull(roomId, request.memberId())) {
+			throw new ChatRoomMemberAlreadyExistsException(roomId, request.memberId());
+		}
+		ChatRoomMember member = room.inviteMember(actorId, request.memberId(), clock.instant());
+		try {
+			return toMemberResponse(chatRoomMemberRepository.saveAndFlush(member));
+		}
+		catch (DataIntegrityViolationException exception) {
+			throw new ChatRoomMemberAlreadyExistsException(roomId, request.memberId());
+		}
+	}
+
+	@Transactional
 	public void delete(String actorId, UUID roomId) {
 		ChatRoom room = findActiveRoom(roomId);
 		room.delete(actorId, clock.instant());
@@ -113,6 +131,16 @@ public class ChatRoomService {
 			room.getVisibility(),
 			memberCount,
 			room.getCreatedAt()
+		);
+	}
+
+	private ChatRoomMemberResponse toMemberResponse(ChatRoomMember member) {
+		return new ChatRoomMemberResponse(
+			member.getId(),
+			member.getRoomId(),
+			member.getMemberId(),
+			member.getRole(),
+			member.getJoinedAt()
 		);
 	}
 }

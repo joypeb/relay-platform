@@ -2,7 +2,7 @@
 
 ## 기능 목적
 
-채팅방 API는 클라이언트가 채팅방을 생성하고, 공개 방 또는 자신이 참여한 방을 조회하며, 생성자 권한으로 방 정보를 수정하거나 삭제할 수 있게 한다. 채팅방의 원천 데이터는 PostgreSQL에 저장한다.
+채팅방 API는 클라이언트가 채팅방을 생성하고, 공개 방 또는 자신이 참여한 방을 조회하며, 생성자 권한으로 방 정보를 수정, 삭제, 멤버 초대할 수 있게 한다. 채팅방과 멤버십의 원천 데이터는 PostgreSQL에 저장한다.
 
 ## 전체 처리 흐름
 
@@ -34,6 +34,15 @@
 3. owner가 아니면 `403 CHAT_ROOM_FORBIDDEN`을 반환한다.
 4. owner이면 방 정보를 변경하고 `200 OK`로 변경된 방을 반환한다.
 
+### 채팅방 멤버 초대
+
+1. 클라이언트가 `POST /api/v1/chat-rooms/{roomId}/members`에 `X-User-Id` header와 초대할 `memberId`를 보낸다.
+2. 서비스가 삭제되지 않은 방을 조회한다.
+3. 요청자가 방 owner인지 확인한다.
+4. 이미 활성 멤버이면 `409 CHAT_ROOM_MEMBER_ALREADY_EXISTS`를 반환한다.
+5. owner이면 `ChatRoomMemberRole.MEMBER` 멤버십을 생성한다.
+6. API는 `201 Created`, `Location`, `ApiResponse<ChatRoomMemberResponse>`를 반환한다.
+
 ### 채팅방 삭제
 
 1. 클라이언트가 `DELETE /api/v1/chat-rooms/{roomId}`를 호출한다.
@@ -57,12 +66,31 @@ sequenceDiagram
     Controller-->>Client: 201 Created
 ```
 
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Controller as ChatRoomController
+    participant Service as ChatRoomService
+    participant RoomRepo as ChatRoomRepository
+    participant MemberRepo as ChatRoomMemberRepository
+
+    Client->>Controller: POST /api/v1/chat-rooms/{roomId}/members + X-User-Id
+    Controller->>Service: inviteMember(actorId, roomId, request)
+    Service->>RoomRepo: findByIdAndDeletedAtIsNull(roomId)
+    Service->>MemberRepo: existsByRoomIdAndMemberIdAndLeftAtIsNull(roomId, memberId)
+    Service->>MemberRepo: saveAndFlush(MEMBER ChatRoomMember)
+    Service-->>Controller: ChatRoomMemberResponse
+    Controller-->>Client: 201 Created
+```
+
 ## 핵심 로직과 주요 분기
 
 - `ChatRoom`은 aggregate root이며 방 이름, 설명, owner, 공개 여부, 상태, 삭제 시각을 가진다.
 - `ChatRoomMember`는 방과 사용자 사이의 멤버십을 나타낸다.
 - 방 생성자는 자동으로 OWNER 멤버가 된다.
-- 수정과 삭제는 `ownerId`가 `X-User-Id`와 일치할 때만 허용한다.
+- 수정, 삭제, 멤버 초대는 `ownerId`가 `X-User-Id`와 일치할 때만 허용한다.
+- 초대는 활성 멤버십만 중복으로 판단한다.
+- 활성 멤버 중복은 서비스에서 사전 조회하고, 동시 요청 경쟁은 DB unique index와 `saveAndFlush` 후 `DataIntegrityViolationException` 변환으로 한 번 더 막는다.
 - 삭제는 hard delete가 아니라 `deleted_at`과 `DELETED` 상태를 사용하는 soft delete다.
 - 삭제된 방은 목록과 상세 조회 대상에서 제외된다.
 - 목록 조회 page size는 1 이상 100 이하로 제한한다.
@@ -71,8 +99,11 @@ sequenceDiagram
 
 - `/Users/parkeunbin/Desktop/project/redis-chat-test/chat-service/src/main/java/com/joypeb/chatservice/chatroom/api/ChatRoomController.java`
 - `/Users/parkeunbin/Desktop/project/redis-chat-test/chat-service/src/main/java/com/joypeb/chatservice/chatroom/application/ChatRoomService.java`
+- `/Users/parkeunbin/Desktop/project/redis-chat-test/chat-service/src/main/java/com/joypeb/chatservice/chatroom/application/ChatRoomMemberAlreadyExistsException.java`
 - `/Users/parkeunbin/Desktop/project/redis-chat-test/chat-service/src/main/java/com/joypeb/chatservice/chatroom/domain/ChatRoom.java`
 - `/Users/parkeunbin/Desktop/project/redis-chat-test/chat-service/src/main/java/com/joypeb/chatservice/chatroom/domain/ChatRoomMember.java`
+- `/Users/parkeunbin/Desktop/project/redis-chat-test/chat-service/src/main/java/com/joypeb/chatservice/chatroom/dto/ChatRoomMemberInviteRequest.java`
+- `/Users/parkeunbin/Desktop/project/redis-chat-test/chat-service/src/main/java/com/joypeb/chatservice/chatroom/dto/ChatRoomMemberResponse.java`
 - `/Users/parkeunbin/Desktop/project/redis-chat-test/chat-service/src/main/java/com/joypeb/chatservice/chatroom/infrastructure/ChatRoomRepository.java`
 - `/Users/parkeunbin/Desktop/project/redis-chat-test/chat-service/src/main/java/com/joypeb/chatservice/chatroom/infrastructure/ChatRoomMemberRepository.java`
 - `/Users/parkeunbin/Desktop/project/redis-chat-test/chat-service/src/main/resources/db/migration/V1__create_chat_rooms.sql`
@@ -94,6 +125,10 @@ sequenceDiagram
 - `PATCH /api/v1/chat-rooms/{roomId}`
   - request: `{ "name": "new-name", "description": "Updated", "publiclyVisible": false }`
   - response: `200 OK` 또는 `403 CHAT_ROOM_FORBIDDEN`
+- `POST /api/v1/chat-rooms/{roomId}/members`
+  - header: `X-User-Id`
+  - request: `{ "memberId": "user-2" }`
+  - response: `201 Created`, `403 CHAT_ROOM_FORBIDDEN`, `404 CHAT_ROOM_NOT_FOUND`, 또는 `409 CHAT_ROOM_MEMBER_ALREADY_EXISTS`
 - `DELETE /api/v1/chat-rooms/{roomId}`
   - response: `204 No Content` 또는 `403 CHAT_ROOM_FORBIDDEN`
 
@@ -112,7 +147,8 @@ sequenceDiagram
 - request body validation 실패는 `400 REQUEST_VALIDATION_FAILED`를 반환한다.
 - `X-User-Id` 누락 또는 형식 오류는 `400 REQUEST_VALIDATION_FAILED`를 반환한다.
 - 존재하지 않거나 삭제된 방은 `404 CHAT_ROOM_NOT_FOUND`를 반환한다.
-- owner가 아닌 사용자의 수정/삭제는 `403 CHAT_ROOM_FORBIDDEN`을 반환한다.
+- owner가 아닌 사용자의 수정/삭제/초대는 `403 CHAT_ROOM_FORBIDDEN`을 반환한다.
+- 이미 활성 멤버인 사용자를 다시 초대하면 `409 CHAT_ROOM_MEMBER_ALREADY_EXISTS`를 반환한다.
 - 내부 JPA, SQL, stack trace는 API 응답에 노출하지 않는다.
 
 ## 테스트 및 검증 방법
@@ -124,6 +160,9 @@ sequenceDiagram
 - 상세 조회
 - owner가 아닌 사용자의 수정 실패
 - owner의 수정 성공
+- owner의 멤버 초대 성공과 초대된 사용자의 joined 목록 노출
+- owner가 아닌 사용자의 멤버 초대 실패
+- 이미 활성 멤버인 사용자 중복 초대 실패
 - 삭제 후 상세 조회 `404`
 
 실행 명령:
@@ -134,7 +173,8 @@ sequenceDiagram
 
 ## 중요한 설계 결정과 Trade-Off
 
-- `ChatRoom`과 `ChatRoomMember`를 분리해 이후 초대, 참여, 나가기, 역할 변경 기능을 추가할 수 있게 했다.
+- `ChatRoom`과 `ChatRoomMember`를 분리해 초대, 참여, 나가기, 역할 변경 기능을 점진적으로 추가할 수 있게 했다.
+- 현재 초대는 owner만 수행할 수 있고 초대 즉시 활성 멤버가 된다. 별도 초대 수락 상태는 사용자 경험과 알림 요구사항이 확정될 때 추가한다.
 - 삭제는 메시지나 감사 로그와의 관계를 고려해 hard delete 대신 soft delete로 구현했다.
 - 현재 권한 모델은 단순하게 owner만 수정/삭제할 수 있도록 했다. 관리자나 moderator 역할은 필요해질 때 `ChatRoomMemberRole`에 추가한다.
 - `X-User-Id` header는 gateway가 인증 후 전달하는 사용자 식별자라는 전제로 사용한다. 운영 인증 모델이 확정되면 gateway와 service-to-service 신뢰 경계를 별도 ADR로 남겨야 한다.

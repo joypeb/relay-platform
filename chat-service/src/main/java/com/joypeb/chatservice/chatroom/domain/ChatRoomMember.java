@@ -49,10 +49,34 @@ public class ChatRoomMember {
 		return new ChatRoomMember(roomId, memberId, ChatRoomMemberRole.OWNER, joinedAt);
 	}
 
+	public static ChatRoomMember member(UUID roomId, String memberId, Instant joinedAt) {
+		return new ChatRoomMember(roomId, memberId, ChatRoomMemberRole.MEMBER, joinedAt);
+	}
+
 	@PrePersist
 	void prePersist() {
 		if (id == null) {
 			id = UUID.randomUUID();
 		}
+	}
+
+	public UUID getId() {
+		return id;
+	}
+
+	public UUID getRoomId() {
+		return roomId;
+	}
+
+	public String getMemberId() {
+		return memberId;
+	}
+
+	public ChatRoomMemberRole getRole() {
+		return role;
+	}
+
+	public Instant getJoinedAt() {
+		return joinedAt;
 	}
 }

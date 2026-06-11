@@ -2,6 +2,8 @@ package com.joypeb.chatservice.chatroom.api;
 
 import com.joypeb.chatservice.chatroom.application.ChatRoomService;
 import com.joypeb.chatservice.chatroom.dto.ChatRoomCreateRequest;
+import com.joypeb.chatservice.chatroom.dto.ChatRoomMemberInviteRequest;
+import com.joypeb.chatservice.chatroom.dto.ChatRoomMemberResponse;
 import com.joypeb.chatservice.chatroom.dto.ChatRoomResponse;
 import com.joypeb.chatservice.chatroom.dto.ChatRoomSummaryResponse;
 import com.joypeb.chatservice.chatroom.dto.ChatRoomUpdateRequest;
@@ -78,6 +80,17 @@ public class ChatRoomController {
 		@Valid @RequestBody ChatRoomUpdateRequest request
 	) {
 		return ResponseEntity.ok(ApiResponse.success(chatRoomService.update(actorId, roomId, request)));
+	}
+
+	@PostMapping("/{roomId}/members")
+	public ResponseEntity<ApiResponse<ChatRoomMemberResponse>> inviteMember(
+		@RequestHeader(ACTOR_HEADER) @NotBlank @Pattern(regexp = "^[A-Za-z0-9._-]{1,64}$") String actorId,
+		@PathVariable UUID roomId,
+		@Valid @RequestBody ChatRoomMemberInviteRequest request
+	) {
+		ChatRoomMemberResponse response = chatRoomService.inviteMember(actorId, roomId, request);
+		return ResponseEntity.created(URI.create("/api/v1/chat-rooms/" + roomId + "/members/" + response.memberId()))
+			.body(ApiResponse.success(response));
 	}
 
 	@DeleteMapping("/{roomId}")
