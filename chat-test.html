@@ -1,0 +1,1245 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Redis Chat Test Console</title>
+  <script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@7.1.1/bundles/stomp.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #f4f6f8;
+      --panel: #ffffff;
+      --panel-strong: #111827;
+      --line: #d7dde4;
+      --muted: #667085;
+      --text: #111827;
+      --green: #0f8a5f;
+      --green-soft: #e8f6ef;
+      --blue: #2563eb;
+      --blue-soft: #eaf1ff;
+      --amber: #b45309;
+      --amber-soft: #fff3d8;
+      --red: #c2410c;
+      --red-soft: #fff0e8;
+      --code: #0b1020;
+      --radius: 8px;
+      --shadow: 0 14px 34px rgba(16, 24, 40, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      letter-spacing: 0;
+    }
+
+    button,
+    input,
+    select,
+    textarea {
+      font: inherit;
+    }
+
+    button {
+      border: 1px solid transparent;
+      border-radius: 7px;
+      padding: 0 12px;
+      min-height: 38px;
+      background: var(--panel-strong);
+      color: white;
+      cursor: pointer;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    button:hover {
+      filter: brightness(1.08);
+    }
+
+    button.secondary {
+      background: #eef2f6;
+      color: var(--text);
+      border-color: var(--line);
+    }
+
+    button.warning {
+      background: var(--red);
+    }
+
+    button.success {
+      background: var(--green);
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+
+    input,
+    select,
+    textarea {
+      width: 100%;
+      min-height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #fff;
+      color: var(--text);
+      padding: 8px 10px;
+      outline: none;
+    }
+
+    input:focus,
+    select:focus,
+    textarea:focus {
+      border-color: var(--blue);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 76px;
+      line-height: 1.45;
+    }
+
+    label {
+      display: grid;
+      gap: 6px;
+      min-width: 0;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    code {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    }
+
+    .app {
+      width: min(100%, 1920px);
+      min-height: 100vh;
+      margin: 0 auto;
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) minmax(320px, 560px) auto;
+      gap: 16px;
+      align-items: end;
+      padding: 18px 24px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+      position: sticky;
+      top: 0;
+      z-index: 5;
+    }
+
+    .brand {
+      min-width: 0;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 22px;
+      line-height: 1.2;
+    }
+
+    .brand p {
+      margin: 5px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .server-row,
+    .button-row,
+    .form-row {
+      display: flex;
+      gap: 8px;
+      align-items: end;
+      min-width: 0;
+    }
+
+    .button-row {
+      flex-wrap: wrap;
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(280px, 380px) minmax(420px, 1fr) minmax(360px, 520px);
+      grid-template-rows: minmax(310px, 0.95fr) minmax(320px, 1fr);
+      grid-template-areas:
+        "session rooms log"
+        "chat chat log";
+      gap: 16px;
+      padding: 16px 24px 24px;
+      min-height: 0;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      overflow: hidden;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      background: #fbfcfe;
+    }
+
+    .panel-header h2 {
+      margin: 0;
+      font-size: 15px;
+      line-height: 1.2;
+    }
+
+    .panel-body {
+      min-height: 0;
+      overflow: auto;
+      padding: 16px;
+    }
+
+    .session-panel {
+      grid-area: session;
+    }
+
+    .rooms-panel {
+      grid-area: rooms;
+    }
+
+    .chat-panel {
+      grid-area: chat;
+    }
+
+    .log-panel {
+      grid-area: log;
+    }
+
+    .stack {
+      display: grid;
+      gap: 12px;
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 28px;
+      border-radius: 999px;
+      padding: 0 10px;
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--muted);
+      background: #eef2f6;
+      white-space: nowrap;
+    }
+
+    .status::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .status.ok {
+      color: var(--green);
+      background: var(--green-soft);
+    }
+
+    .status.warn {
+      color: var(--amber);
+      background: var(--amber-soft);
+    }
+
+    .status.bad {
+      color: var(--red);
+      background: var(--red-soft);
+    }
+
+    .meta-grid {
+      display: grid;
+      gap: 8px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fbfcfe;
+    }
+
+    .meta-line {
+      display: grid;
+      grid-template-columns: 88px minmax(0, 1fr);
+      gap: 8px;
+      align-items: start;
+      font-size: 13px;
+    }
+
+    .meta-line span:first-child {
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .meta-line code {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .room-list,
+    .message-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .room-item,
+    .message-item {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      color: var(--text);
+      padding: 10px;
+      display: grid;
+      gap: 6px;
+      text-align: left;
+      min-height: auto;
+      font-weight: 400;
+      white-space: normal;
+    }
+
+    .room-item {
+      cursor: pointer;
+    }
+
+    .room-item:hover,
+    .room-item.active {
+      border-color: var(--blue);
+      background: var(--blue-soft);
+    }
+
+    .room-title,
+    .message-title {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      font-weight: 800;
+      font-size: 13px;
+      min-width: 0;
+    }
+
+    .room-title span:first-child,
+    .message-title span:first-child {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .room-sub,
+    .message-body {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+
+    .messages-shell {
+      display: grid;
+      grid-template-rows: minmax(160px, 1fr) auto;
+      gap: 12px;
+      min-height: 100%;
+    }
+
+    .message-list {
+      align-content: start;
+      min-height: 180px;
+      max-height: 100%;
+      overflow: auto;
+      padding-right: 4px;
+    }
+
+    .composer {
+      border-top: 1px solid var(--line);
+      padding-top: 12px;
+    }
+
+    .log-box {
+      height: 100%;
+      min-height: 360px;
+      background: var(--code);
+      color: #d8e2ff;
+      overflow: auto;
+      padding: 12px;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 12px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .log-entry {
+      margin: 0 0 10px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    }
+
+    .log-time {
+      color: #93c5fd;
+    }
+
+    .log-rest {
+      color: #86efac;
+    }
+
+    .log-stomp {
+      color: #fcd34d;
+    }
+
+    .log-error {
+      color: #fb7185;
+    }
+
+    .empty {
+      display: grid;
+      place-items: center;
+      min-height: 120px;
+      color: var(--muted);
+      border: 1px dashed var(--line);
+      border-radius: var(--radius);
+      text-align: center;
+      padding: 16px;
+      font-size: 13px;
+    }
+
+    .grow {
+      flex: 1;
+      min-width: 160px;
+    }
+
+    .checkbox-label {
+      display: flex;
+      min-height: 38px;
+      align-items: center;
+      gap: 8px;
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .checkbox-label input {
+      width: 16px;
+      min-height: 16px;
+    }
+
+    @media (max-width: 1180px) {
+      .topbar {
+        grid-template-columns: 1fr;
+        align-items: stretch;
+      }
+
+      .workspace {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        grid-template-rows: auto auto minmax(420px, 1fr);
+        grid-template-areas:
+          "session rooms"
+          "chat chat"
+          "log log";
+      }
+    }
+
+    @media (min-width: 1181px) {
+      body {
+        overflow: hidden;
+      }
+
+      .app {
+        height: 100vh;
+      }
+
+      .workspace {
+        overflow: hidden;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .topbar,
+      .workspace {
+        padding-left: 12px;
+        padding-right: 12px;
+      }
+
+      .workspace {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto;
+        grid-template-areas:
+          "session"
+          "rooms"
+          "chat"
+          "log";
+      }
+
+      .server-row,
+      .form-row {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .split {
+        grid-template-columns: 1fr;
+      }
+
+      .brand h1 {
+        font-size: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div class="brand">
+        <h1>Redis Chat Test Console</h1>
+        <p>Session, chat room, STOMP message flow</p>
+      </div>
+      <div class="server-row">
+        <label class="grow">
+          Gateway URL
+          <input id="gatewayUrl" value="http://localhost:8080" autocomplete="off">
+        </label>
+        <button id="saveGatewayUrl" class="secondary" type="button">저장</button>
+      </div>
+      <div class="button-row">
+        <span id="sessionStatus" class="status bad">세션 없음</span>
+        <span id="stompStatus" class="status bad">STOMP 끊김</span>
+      </div>
+    </header>
+
+    <section class="workspace">
+      <article class="panel session-panel">
+        <div class="panel-header">
+          <h2>세션 로그인</h2>
+          <button id="currentSession" class="secondary" type="button">현재 세션</button>
+        </div>
+        <div class="panel-body stack">
+          <div class="form-row">
+            <label class="grow">
+              User ID
+              <input id="userId" value="user-1" maxlength="64" autocomplete="username">
+            </label>
+            <button id="login" class="success" type="button">로그인</button>
+            <button id="logout" class="warning" type="button">로그아웃</button>
+          </div>
+          <div class="meta-grid">
+            <div class="meta-line">
+              <span>User</span>
+              <code id="currentUser">-</code>
+            </div>
+            <div class="meta-line">
+              <span>Session</span>
+              <code id="currentSessionId">-</code>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="panel rooms-panel">
+        <div class="panel-header">
+          <h2>채팅방</h2>
+          <div class="button-row">
+            <select id="roomScope" aria-label="채팅방 범위">
+              <option value="public">public</option>
+              <option value="joined">joined</option>
+            </select>
+            <button id="loadRooms" class="secondary" type="button">조회</button>
+          </div>
+        </div>
+        <div class="panel-body stack">
+          <div class="stack">
+            <div class="split">
+              <label>
+                이름
+                <input id="roomName" value="general" maxlength="100">
+              </label>
+              <label class="checkbox-label">
+                <input id="roomPublic" type="checkbox" checked>
+                공개
+              </label>
+            </div>
+            <label>
+              설명
+              <input id="roomDescription" value="General discussion" maxlength="500">
+            </label>
+            <div class="button-row">
+              <button id="createRoom" class="success" type="button">생성</button>
+              <button id="updateRoom" class="secondary" type="button">수정</button>
+              <button id="deleteRoom" class="warning" type="button">삭제</button>
+            </div>
+          </div>
+          <div class="meta-grid">
+            <div class="meta-line">
+              <span>Selected</span>
+              <code id="selectedRoomId">-</code>
+            </div>
+          </div>
+          <div id="roomList" class="room-list">
+            <div class="empty">채팅방을 조회하거나 생성하세요.</div>
+          </div>
+        </div>
+      </article>
+
+      <article class="panel chat-panel">
+        <div class="panel-header">
+          <h2>채팅</h2>
+          <div class="button-row">
+            <button id="connectStomp" class="success" type="button">연결</button>
+            <button id="disconnectStomp" class="secondary" type="button">해제</button>
+            <button id="subscribeRoom" class="secondary" type="button">구독</button>
+          </div>
+        </div>
+        <div class="panel-body messages-shell">
+          <div id="messageList" class="message-list">
+            <div class="empty">채팅방을 선택하고 STOMP를 연결하세요.</div>
+          </div>
+          <div class="composer stack">
+            <div class="form-row">
+              <label class="grow">
+                초대할 User ID
+                <input id="inviteUserId" value="user-2" maxlength="64">
+              </label>
+              <button id="inviteMember" class="secondary" type="button">초대</button>
+              <label class="grow">
+                afterSequence
+                <input id="afterSequence" type="number" min="0" value="0">
+              </label>
+              <label class="grow">
+                size
+                <input id="historySize" type="number" min="1" max="100" value="50">
+              </label>
+              <button id="loadHistory" class="secondary" type="button">히스토리</button>
+            </div>
+            <div class="form-row">
+              <label class="grow">
+                메시지
+                <textarea id="messageContent" maxlength="2000">hello from browser</textarea>
+              </label>
+              <button id="sendMessage" class="success" type="button">전송</button>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="panel log-panel">
+        <div class="panel-header">
+          <h2>WebSocket / STOMP 로그</h2>
+          <div class="button-row">
+            <button id="clearLog" class="secondary" type="button">지우기</button>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div id="logBox" class="log-box" aria-live="polite"></div>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    const state = {
+      gatewayUrl: localStorage.getItem("redis-chat.gatewayUrl") || "http://localhost:8080",
+      userId: "",
+      sessionId: "",
+      rooms: [],
+      selectedRoom: null,
+      stompClient: null,
+      roomSubscription: null,
+      ackSubscription: null,
+      errorSubscription: null,
+      seenEventIds: new Set(),
+      seenMessageIds: new Set(),
+      pendingRequests: new Map()
+    };
+
+    const $ = (id) => document.getElementById(id);
+    const elements = {
+      gatewayUrl: $("gatewayUrl"),
+      saveGatewayUrl: $("saveGatewayUrl"),
+      userId: $("userId"),
+      sessionStatus: $("sessionStatus"),
+      stompStatus: $("stompStatus"),
+      currentUser: $("currentUser"),
+      currentSessionId: $("currentSessionId"),
+      login: $("login"),
+      logout: $("logout"),
+      currentSession: $("currentSession"),
+      roomScope: $("roomScope"),
+      loadRooms: $("loadRooms"),
+      roomName: $("roomName"),
+      roomDescription: $("roomDescription"),
+      roomPublic: $("roomPublic"),
+      createRoom: $("createRoom"),
+      updateRoom: $("updateRoom"),
+      deleteRoom: $("deleteRoom"),
+      selectedRoomId: $("selectedRoomId"),
+      roomList: $("roomList"),
+      connectStomp: $("connectStomp"),
+      disconnectStomp: $("disconnectStomp"),
+      subscribeRoom: $("subscribeRoom"),
+      inviteUserId: $("inviteUserId"),
+      inviteMember: $("inviteMember"),
+      loadHistory: $("loadHistory"),
+      messageList: $("messageList"),
+      messageContent: $("messageContent"),
+      sendMessage: $("sendMessage"),
+      afterSequence: $("afterSequence"),
+      historySize: $("historySize"),
+      clearLog: $("clearLog"),
+      logBox: $("logBox")
+    };
+
+    function now() {
+      return new Date().toISOString();
+    }
+
+    function uuid() {
+      if (crypto.randomUUID) {
+        return crypto.randomUUID();
+      }
+      return "req-" + Date.now() + "-" + Math.random().toString(16).slice(2);
+    }
+
+    function gatewayUrl() {
+      return elements.gatewayUrl.value.trim().replace(/\/+$/, "");
+    }
+
+    function wsUrl() {
+      const base = gatewayUrl();
+      if (base.startsWith("https://")) {
+        return "wss://" + base.slice("https://".length) + "/ws";
+      }
+      if (base.startsWith("http://")) {
+        return "ws://" + base.slice("http://".length) + "/ws";
+      }
+      return base.replace(/^\/+/, "") + "/ws";
+    }
+
+    function log(kind, title, details) {
+      const entry = document.createElement("div");
+      const className = kind === "error" ? "log-error" : kind === "stomp" ? "log-stomp" : "log-rest";
+      entry.className = "log-entry";
+      entry.innerHTML = `<span class="log-time">${now()}</span> <span class="${className}">[${kind.toUpperCase()}]</span> ${escapeHtml(title)}\n${escapeHtml(formatDetails(details))}`;
+      elements.logBox.appendChild(entry);
+      elements.logBox.scrollTop = elements.logBox.scrollHeight;
+    }
+
+    function formatDetails(details) {
+      if (details === undefined || details === null || details === "") {
+        return "";
+      }
+      if (typeof details === "string") {
+        return details;
+      }
+      return JSON.stringify(details, null, 2);
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function setSession(userId, sessionId) {
+      state.userId = userId || "";
+      state.sessionId = sessionId || "";
+      elements.currentUser.textContent = state.userId || "-";
+      elements.currentSessionId.textContent = state.sessionId || "-";
+      elements.sessionStatus.textContent = state.userId ? "세션 활성" : "세션 없음";
+      elements.sessionStatus.className = "status " + (state.userId ? "ok" : "bad");
+    }
+
+    function setStompStatus(text, tone) {
+      elements.stompStatus.textContent = text;
+      elements.stompStatus.className = "status " + tone;
+    }
+
+    async function request(method, path, body) {
+      const url = gatewayUrl() + path;
+      const headers = { "Accept": "application/json" };
+      const init = { method, credentials: "include", headers };
+      if (body !== undefined) {
+        headers["Content-Type"] = "application/json";
+        init.body = JSON.stringify(body);
+      }
+
+      log("rest", `${method} ${path}`, body);
+      const response = await fetch(url, init);
+      const contentType = response.headers.get("content-type") || "";
+      const data = contentType.includes("application/json") ? await response.json() : await response.text();
+      log(response.ok ? "rest" : "error", `${response.status} ${method} ${path}`, data);
+
+      if (!response.ok) {
+        throw new Error(typeof data === "string" ? data : data.detail || data.message || response.statusText);
+      }
+      return data;
+    }
+
+    async function login() {
+      const userId = elements.userId.value.trim();
+      if (!userId) {
+        log("error", "로그인 실패", "User ID가 필요합니다.");
+        return;
+      }
+      const response = await request("POST", "/api/v1/sessions", { userId });
+      setSession(response.data.userId, response.data.sessionId);
+    }
+
+    async function currentSession() {
+      const response = await request("GET", "/api/v1/sessions/current");
+      setSession(response.data.userId, response.data.sessionId);
+    }
+
+    async function logout() {
+      await request("DELETE", "/api/v1/sessions/current");
+      setSession("", "");
+      disconnectStomp();
+    }
+
+    async function loadRooms() {
+      const scope = encodeURIComponent(elements.roomScope.value);
+      const response = await request("GET", `/api/v1/chat-rooms?scope=${scope}&page=0&size=20`);
+      state.rooms = extractList(response.data).map(normalizeRoom);
+      renderRooms();
+    }
+
+    async function createRoom() {
+      const response = await request("POST", "/api/v1/chat-rooms", roomPayload());
+      upsertRoom(response.data);
+      selectRoom(response.data);
+    }
+
+    async function updateRoom() {
+      if (!state.selectedRoom) {
+        log("error", "채팅방 수정 실패", "선택된 채팅방이 없습니다.");
+        return;
+      }
+      const response = await request("PATCH", `/api/v1/chat-rooms/${state.selectedRoom.id}`, roomPayload());
+      upsertRoom(response.data);
+      selectRoom(response.data);
+    }
+
+    async function deleteRoom() {
+      if (!state.selectedRoom) {
+        log("error", "채팅방 삭제 실패", "선택된 채팅방이 없습니다.");
+        return;
+      }
+      const roomId = state.selectedRoom.id;
+      await request("DELETE", `/api/v1/chat-rooms/${roomId}`);
+      state.rooms = state.rooms.filter((room) => room.id !== roomId);
+      state.selectedRoom = null;
+      elements.selectedRoomId.textContent = "-";
+      renderRooms();
+      renderMessages([]);
+    }
+
+    async function inviteMember() {
+      if (!state.selectedRoom) {
+        log("error", "멤버 초대 실패", "선택된 채팅방이 없습니다.");
+        return;
+      }
+      const memberId = elements.inviteUserId.value.trim();
+      if (!memberId) {
+        log("error", "멤버 초대 실패", "User ID가 필요합니다.");
+        return;
+      }
+      await request("POST", `/api/v1/chat-rooms/${state.selectedRoom.id}/members`, { memberId });
+    }
+
+    async function loadHistory() {
+      if (!state.selectedRoom) {
+        log("error", "히스토리 조회 실패", "선택된 채팅방이 없습니다.");
+        return;
+      }
+      const afterSequence = encodeURIComponent(elements.afterSequence.value || "0");
+      const size = encodeURIComponent(elements.historySize.value || "50");
+      const response = await request("GET", `/api/v1/chat-rooms/${state.selectedRoom.id}/messages?afterSequence=${afterSequence}&size=${size}`);
+      renderMessages(response.data || []);
+    }
+
+    function roomPayload() {
+      return {
+        name: elements.roomName.value.trim(),
+        description: elements.roomDescription.value.trim(),
+        publiclyVisible: elements.roomPublic.checked
+      };
+    }
+
+    function upsertRoom(room) {
+      room = normalizeRoom(room);
+      const index = state.rooms.findIndex((item) => item.id === room.id);
+      if (index >= 0) {
+        state.rooms[index] = room;
+      } else {
+        state.rooms.unshift(room);
+      }
+      renderRooms();
+    }
+
+    function extractList(data) {
+      if (Array.isArray(data)) {
+        return data;
+      }
+      if (Array.isArray(data?.items)) {
+        return data.items;
+      }
+      if (Array.isArray(data?.content)) {
+        return data.content;
+      }
+      return [];
+    }
+
+    function normalizeRoom(room) {
+      const visibility = room?.visibility || (room?.publiclyVisible ? "PUBLIC" : "PRIVATE");
+      return {
+        ...room,
+        visibility,
+        publiclyVisible: visibility === "PUBLIC"
+      };
+    }
+
+    function renderRooms() {
+      elements.roomList.innerHTML = "";
+      if (!state.rooms.length) {
+        elements.roomList.innerHTML = `<div class="empty">채팅방이 없습니다.</div>`;
+        return;
+      }
+      for (const room of state.rooms) {
+        const item = document.createElement("button");
+        item.type = "button";
+        item.className = "room-item" + (state.selectedRoom?.id === room.id ? " active" : "");
+        item.innerHTML = `
+          <div class="room-title">
+            <span>${escapeHtml(room.name || "(no name)")}</span>
+            <span>${escapeHtml(room.visibility || (room.publiclyVisible ? "PUBLIC" : "PRIVATE"))}</span>
+          </div>
+          <div class="room-sub">${escapeHtml(room.description || "")}</div>
+          <div class="room-sub">owner: ${escapeHtml(room.ownerId || "-")} · members: ${escapeHtml(room.memberCount ?? "-")}</div>
+          <div class="room-sub"><code>${escapeHtml(room.id)}</code></div>
+        `;
+        item.addEventListener("click", () => selectRoom(room));
+        elements.roomList.appendChild(item);
+      }
+    }
+
+    function selectRoom(room) {
+      room = normalizeRoom(room);
+      state.selectedRoom = room;
+      elements.selectedRoomId.textContent = room.id;
+      elements.roomName.value = room.name || "";
+      elements.roomDescription.value = room.description || "";
+      elements.roomPublic.checked = room.publiclyVisible;
+      renderRooms();
+      renderMessages([]);
+      log("rest", "채팅방 선택", room);
+    }
+
+    function connectStomp() {
+      if (state.stompClient?.active) {
+        log("stomp", "이미 연결됨", wsUrl());
+        return;
+      }
+
+      const client = new StompJs.Client({
+        brokerURL: wsUrl(),
+        reconnectDelay: 0,
+        heartbeatIncoming: 10000,
+        heartbeatOutgoing: 10000,
+        debug: (line) => log("stomp", "FRAME", line),
+        onConnect: (frame) => {
+          setStompStatus("STOMP 연결", "ok");
+          log("stomp", "CONNECTED", frame.headers);
+          subscribeSystemQueues();
+          if (state.selectedRoom) {
+            subscribeRoom();
+          }
+        },
+        onDisconnect: (frame) => {
+          setStompStatus("STOMP 끊김", "bad");
+          log("stomp", "DISCONNECTED", frame.headers);
+        },
+        onStompError: (frame) => {
+          setStompStatus("STOMP 오류", "bad");
+          log("error", "BROKER ERROR", {
+            headers: frame.headers,
+            body: frame.body
+          });
+        },
+        onWebSocketClose: (event) => {
+          setStompStatus("STOMP 끊김", "bad");
+          log("stomp", "WEBSOCKET CLOSE", {
+            code: event.code,
+            reason: event.reason,
+            wasClean: event.wasClean
+          });
+        },
+        onWebSocketError: (event) => {
+          setStompStatus("STOMP 오류", "bad");
+          log("error", "WEBSOCKET ERROR", event.type || event);
+        }
+      });
+
+      state.stompClient = client;
+      setStompStatus("STOMP 연결 중", "warn");
+      log("stomp", "CONNECT", wsUrl());
+      client.activate();
+    }
+
+    function disconnectStomp() {
+      if (state.roomSubscription) {
+        state.roomSubscription.unsubscribe();
+        state.roomSubscription = null;
+      }
+      if (state.ackSubscription) {
+        state.ackSubscription.unsubscribe();
+        state.ackSubscription = null;
+      }
+      if (state.errorSubscription) {
+        state.errorSubscription.unsubscribe();
+        state.errorSubscription = null;
+      }
+      if (state.stompClient) {
+        state.stompClient.deactivate();
+        state.stompClient = null;
+      }
+      setStompStatus("STOMP 끊김", "bad");
+    }
+
+    function subscribeSystemQueues() {
+      if (!state.stompClient?.connected) {
+        return;
+      }
+      if (!state.ackSubscription) {
+        state.ackSubscription = state.stompClient.subscribe("/user/queue/chat/acks", (message) => {
+          const event = handleStompMessage("ACK", message);
+          if (event?.payload?.requestId) {
+            state.pendingRequests.delete(event.payload.requestId);
+          }
+        });
+        log("stomp", "SUBSCRIBE /user/queue/chat/acks");
+      }
+      if (!state.errorSubscription) {
+        state.errorSubscription = state.stompClient.subscribe("/user/queue/chat/errors", (message) => {
+          const event = handleStompMessage("ERROR", message, true);
+          if (event?.payload?.requestId) {
+            state.pendingRequests.delete(event.payload.requestId);
+          }
+        });
+        log("stomp", "SUBSCRIBE /user/queue/chat/errors");
+      }
+    }
+
+    function subscribeRoom() {
+      if (!state.selectedRoom) {
+        log("error", "구독 실패", "선택된 채팅방이 없습니다.");
+        return;
+      }
+      if (!state.stompClient?.connected) {
+        log("error", "구독 실패", "STOMP 연결이 필요합니다.");
+        return;
+      }
+      if (state.roomSubscription) {
+        state.roomSubscription.unsubscribe();
+        state.roomSubscription = null;
+      }
+      const destination = `/topic/chat-rooms/${state.selectedRoom.id}/messages`;
+      state.roomSubscription = state.stompClient.subscribe(destination, (message) => {
+        const event = handleStompMessage("MESSAGE", message);
+        if (event?.eventId && state.seenEventIds.has(event.eventId)) {
+          return;
+        }
+        if (event?.eventId) {
+          state.seenEventIds.add(event.eventId);
+        }
+        appendMessage(event);
+      });
+      log("stomp", `SUBSCRIBE ${destination}`);
+    }
+
+    function sendMessage() {
+      if (!state.selectedRoom) {
+        log("error", "메시지 전송 실패", "선택된 채팅방이 없습니다.");
+        return;
+      }
+      if (!state.stompClient?.connected) {
+        log("error", "메시지 전송 실패", "STOMP 연결이 필요합니다.");
+        return;
+      }
+      const content = elements.messageContent.value.trim();
+      if (!content) {
+        log("error", "메시지 전송 실패", "메시지 내용이 필요합니다.");
+        return;
+      }
+      const destination = `/app/chat-rooms/${state.selectedRoom.id}/messages`;
+      const requestId = uuid();
+      const body = {
+        requestId,
+        type: "TEXT",
+        payload: { content },
+        sentAt: now()
+      };
+      state.pendingRequests.set(requestId, { roomId: state.selectedRoom.id, content });
+      log("stomp", `SEND ${destination}`, body);
+      state.stompClient.publish({
+        destination,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body)
+      });
+    }
+
+    function handleStompMessage(label, message, asError = false) {
+      let body = message.body;
+      try {
+        body = JSON.parse(message.body);
+      } catch {
+        // Keep raw body when the frame is not JSON.
+      }
+      log(asError ? "error" : "stomp", label, {
+        headers: message.headers,
+        body
+      });
+      return body;
+    }
+
+    function renderMessages(messages) {
+      elements.messageList.innerHTML = "";
+      state.seenMessageIds.clear();
+      if (!messages.length) {
+        elements.messageList.innerHTML = `<div class="empty">표시할 메시지가 없습니다.</div>`;
+        return;
+      }
+      for (const message of messages) {
+        appendMessage(message);
+      }
+    }
+
+    function normalizeMessage(message) {
+      const payload = message?.payload && typeof message.payload === "object" ? message.payload : message;
+      if (!payload) {
+        return null;
+      }
+      return {
+        eventId: message?.eventId || "",
+        eventType: message?.type && message?.payload ? message.type : "",
+        messageId: payload.messageId || payload.id || "",
+        roomId: payload.roomId || "",
+        senderId: payload.senderId || payload.createdBy || "-",
+        sequence: payload.sequence ?? "-",
+        type: payload.type || "",
+        content: payload.content || "",
+        createdAt: payload.createdAt || message?.occurredAt || ""
+      };
+    }
+
+    function appendMessage(message, appendToEnd = true) {
+      const normalized = normalizeMessage(message);
+      if (!normalized) {
+        return;
+      }
+      if (normalized.messageId && state.seenMessageIds.has(normalized.messageId)) {
+        return;
+      }
+      if (normalized.messageId) {
+        state.seenMessageIds.add(normalized.messageId);
+      }
+      const empty = elements.messageList.querySelector(".empty");
+      if (empty) {
+        empty.remove();
+      }
+      const item = document.createElement("div");
+      item.className = "message-item";
+      if (normalized.messageId) {
+        item.dataset.messageId = normalized.messageId;
+      }
+      item.innerHTML = `
+        <div class="message-title">
+          <span>${escapeHtml(normalized.senderId)}</span>
+          <span>#${escapeHtml(normalized.sequence)}</span>
+        </div>
+        <div class="message-body">${escapeHtml(normalized.content)}</div>
+        <div class="message-body">
+          ${escapeHtml(normalized.type || "TEXT")} · ${escapeHtml(normalized.createdAt)}
+        </div>
+        <div class="message-body"><code>${escapeHtml(normalized.messageId || normalized.eventId || "-")}</code></div>
+      `;
+      if (appendToEnd) {
+        elements.messageList.appendChild(item);
+        elements.messageList.scrollTop = elements.messageList.scrollHeight;
+      } else {
+        elements.messageList.prepend(item);
+      }
+    }
+
+    function bindEvents() {
+      elements.saveGatewayUrl.addEventListener("click", () => {
+        state.gatewayUrl = gatewayUrl();
+        localStorage.setItem("redis-chat.gatewayUrl", state.gatewayUrl);
+        log("rest", "Gateway URL 저장", state.gatewayUrl);
+      });
+      elements.login.addEventListener("click", () => run(login));
+      elements.logout.addEventListener("click", () => run(logout));
+      elements.currentSession.addEventListener("click", () => run(currentSession));
+      elements.loadRooms.addEventListener("click", () => run(loadRooms));
+      elements.createRoom.addEventListener("click", () => run(createRoom));
+      elements.updateRoom.addEventListener("click", () => run(updateRoom));
+      elements.deleteRoom.addEventListener("click", () => run(deleteRoom));
+      elements.connectStomp.addEventListener("click", connectStomp);
+      elements.disconnectStomp.addEventListener("click", disconnectStomp);
+      elements.subscribeRoom.addEventListener("click", subscribeRoom);
+      elements.inviteMember.addEventListener("click", () => run(inviteMember));
+      elements.loadHistory.addEventListener("click", () => run(loadHistory));
+      elements.sendMessage.addEventListener("click", sendMessage);
+      elements.clearLog.addEventListener("click", () => {
+        elements.logBox.innerHTML = "";
+      });
+    }
+
+    async function run(action) {
+      try {
+        await action();
+      } catch (error) {
+        log("error", error.message || "요청 실패", error.stack || error);
+      }
+    }
+
+    elements.gatewayUrl.value = state.gatewayUrl;
+    bindEvents();
+    setSession("", "");
+    setStompStatus("STOMP 끊김", "bad");
+    log("rest", "READY", {
+      gatewayUrl: state.gatewayUrl,
+      websocketUrl: wsUrl()
+    });
+  </script>
+</body>
+</html>
