@@ -24,13 +24,15 @@ docker compose up --build
 구성 요소:
 
 - `gateway`: `gateway/Dockerfile`로 빌드되는 Spring Boot gateway 컨테이너
+- `chat-service`: `chat-service/Dockerfile`로 빌드되는 Spring Boot chat-service 컨테이너
 - `redis`: Redis 7, append-only file 활성화, `redis-data` 볼륨 사용
 - `postgres`: PostgreSQL 17, `postgres-data` 볼륨 사용
 
 기본 외부 포트:
 
 - gateway: `8080`
-- chat-service base URL: `http://host.docker.internal:8081`
+- chat-service: `8081`
+- chat-service base URL: `http://chat-service:8081`
 - Redis: `6379`
 - PostgreSQL: `5432`
 
@@ -48,6 +50,7 @@ gateway 컨테이너에는 다음 Spring 환경 변수가 주입된다.
 헬스체크:
 
 - gateway: `GET /actuator/health`
+- chat-service: `GET /actuator/health`
 - Redis: `redis-cli ping`
 - PostgreSQL: `pg_isready`
 
