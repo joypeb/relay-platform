@@ -4,6 +4,7 @@
 
 - Java 21
 - PostgreSQL 17 또는 `docker-compose.yml`의 `postgres` 서비스
+- Redis 7 또는 `docker-compose.yml`의 `redis` 서비스
 
 ## Environment
 
@@ -13,6 +14,8 @@
 SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5432/redis_chat
 SPRING_DATASOURCE_USERNAME=redis_chat
 SPRING_DATASOURCE_PASSWORD=redis_chat_password
+SPRING_DATA_REDIS_HOST=localhost
+SPRING_DATA_REDIS_PORT=6379
 ```
 
 ## Run
@@ -23,7 +26,7 @@ SPRING_DATASOURCE_PASSWORD=redis_chat_password
 
 ```bash
 cp .env.example .env
-docker compose up --build chat-service postgres
+docker compose up --build chat-service postgres redis
 ```
 
 기본 compose 설정은 다음 값을 사용한다.
@@ -32,6 +35,8 @@ docker compose up --build chat-service postgres
 - host port: `${CHAT_SERVICE_HOST_PORT:-8081}`
 - container port: `${CHAT_SERVICE_CONTAINER_PORT:-8081}`
 - datasource URL: `jdbc:postgresql://postgres:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-redis_chat}`
+- Redis host: `redis`
+- Redis port: `${REDIS_PORT:-6379}`
 - healthcheck: `GET /actuator/health`
 
 ### Run With Gradle
