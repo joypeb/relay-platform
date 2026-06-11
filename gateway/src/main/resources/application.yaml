@@ -1,10 +1,26 @@
 spring:
   application:
     name: gateway
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
 
 gateway:
+  cors:
+    allowed-origin-patterns:
+      - "http://localhost:*"
+      - "http://127.0.0.1:*"
   chat-service:
     base-url: ${CHAT_SERVICE_BASE_URL:http://localhost:8081}
+  chat-messages:
+    stream-key: ${CHAT_MESSAGE_STREAM_KEY:stream:chat:message-created}
+    instance-id: ${GATEWAY_INSTANCE_ID:${HOSTNAME:local}}
+    group-prefix: ${CHAT_MESSAGE_STREAM_GROUP_PREFIX:gateway-broadcast}
+    consumer-name: ${CHAT_MESSAGE_STREAM_CONSUMER_NAME:${HOSTNAME:local}}
+    batch-size: ${CHAT_MESSAGE_STREAM_BATCH_SIZE:20}
+    block-timeout: ${CHAT_MESSAGE_STREAM_BLOCK_TIMEOUT:2s}
+    stream-consumer-enabled: ${CHAT_MESSAGE_STREAM_CONSUMER_ENABLED:true}
   websocket:
     allowed-origin-patterns:
       - "*"

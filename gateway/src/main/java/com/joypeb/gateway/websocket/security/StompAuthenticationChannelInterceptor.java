@@ -1,7 +1,7 @@
 package com.joypeb.gateway.websocket.security;
 
 import java.security.Principal;
-import java.util.Set;
+import java.util.regex.Pattern;
 
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
@@ -14,9 +14,12 @@ import org.springframework.util.StringUtils;
 @Component
 public class StompAuthenticationChannelInterceptor implements ChannelInterceptor {
 
-	private static final Set<String> ALLOWED_SUBSCRIBE_PREFIXES = Set.of(
-			"/topic/",
-			"/user/queue/"
+	private static final Pattern CHAT_ROOM_MESSAGES_TOPIC = Pattern.compile(
+			"^/topic/chat-rooms/[0-9a-fA-F-]{36}/messages$"
+	);
+
+	private static final Pattern CHAT_ROOM_MESSAGES_SEND = Pattern.compile(
+			"^/app/chat-rooms/[0-9a-fA-F-]{36}/messages$"
 	);
 
 	@Override
@@ -57,15 +60,24 @@ public class StompAuthenticationChannelInterceptor implements ChannelInterceptor
 			throw new StompAuthorizationException("STOMP SUBSCRIBE destination is required.");
 		}
 
-		boolean allowed = ALLOWED_SUBSCRIBE_PREFIXES.stream().anyMatch(destination::startsWith);
+		boolean allowed = destination.equals("/user/queue/chat/acks")
+				|| destination.equals("/user/queue/chat/errors")
+				|| destination.equals("/user/queue/gateway/acks")
+				|| CHAT_ROOM_MESSAGES_TOPIC.matcher(destination).matches();
 		if (!allowed) {
 			throw new StompAuthorizationException("STOMP SUBSCRIBE destination is not allowed.");
 		}
 	}
 
 	private void requireApplicationDestination(String destination) {
-		if (!StringUtils.hasText(destination) || !destination.startsWith("/app/")) {
-			throw new StompAuthorizationException("STOMP SEND destination must start with /app/.");
+		if (!StringUtils.hasText(destination)) {
+			throw new StompAuthorizationException("STOMP SEND destination is required.");
+		}
+
+		boolean allowed = destination.equals("/app/gateway/acks")
+				|| CHAT_ROOM_MESSAGES_SEND.matcher(destination).matches();
+		if (!allowed) {
+			throw new StompAuthorizationException("STOMP SEND destination is not allowed.");
 		}
 	}
 }

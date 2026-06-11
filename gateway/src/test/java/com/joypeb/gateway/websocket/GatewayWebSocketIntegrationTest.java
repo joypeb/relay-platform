@@ -22,14 +22,20 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpHeaders;
 import org.springframework.messaging.converter.JacksonJsonMessageConverter;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompFrameHandler;
 import org.springframework.messaging.simp.stomp.StompHeaders;
 import org.springframework.messaging.simp.stomp.StompSession;
 import org.springframework.messaging.simp.stomp.StompSessionHandlerAdapter;
+import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.web.socket.client.standard.StandardWebSocketClient;
 import org.springframework.web.socket.messaging.WebSocketStompClient;
 
 import com.joypeb.gateway.websocket.connection.StompConnectionRegistry;
+import com.joypeb.gateway.websocket.security.StompAuthenticationChannelInterceptor;
+import com.joypeb.gateway.websocket.security.StompAuthorizationException;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class GatewayWebSocketIntegrationTest {
@@ -39,6 +45,9 @@ class GatewayWebSocketIntegrationTest {
 
 	@Autowired
 	private StompConnectionRegistry connectionRegistry;
+
+	@Autowired
+	private StompAuthenticationChannelInterceptor stompAuthenticationChannelInterceptor;
 
 	@Test
 	void connectAndSend_whenSessionCookieIsValid_receivesUserAckEvent() throws Exception {
@@ -95,6 +104,20 @@ class GatewayWebSocketIntegrationTest {
 		stompClient.stop();
 	}
 
+	@Test
+	void stompAuthorizationAllowsChatMessageDestinations() {
+		assertAllowed(StompCommand.SUBSCRIBE, "/topic/chat-rooms/11111111-1111-1111-1111-111111111111/messages");
+		assertAllowed(StompCommand.SUBSCRIBE, "/user/queue/chat/acks");
+		assertAllowed(StompCommand.SUBSCRIBE, "/user/queue/chat/errors");
+		assertAllowed(StompCommand.SEND, "/app/chat-rooms/11111111-1111-1111-1111-111111111111/messages");
+	}
+
+	@Test
+	void stompAuthorizationRejectsInvalidChatMessageDestinations() {
+		assertRejected(StompCommand.SEND, "/topic/chat-rooms/11111111-1111-1111-1111-111111111111/messages");
+		assertRejected(StompCommand.SUBSCRIBE, "/queue/internal");
+	}
+
 	private String loginAndGetSessionCookie(String userId) throws Exception {
 		HttpRequest request = HttpRequest.newBuilder()
 				.uri(java.net.URI.create("http://localhost:%d/api/v1/sessions".formatted(port)))
@@ -119,6 +142,30 @@ class GatewayWebSocketIntegrationTest {
 		WebSocketStompClient stompClient = new WebSocketStompClient(new StandardWebSocketClient());
 		stompClient.setMessageConverter(new JacksonJsonMessageConverter());
 		return stompClient;
+	}
+
+	private void assertAllowed(StompCommand command, String destination) {
+		Message<?> message = stompMessage(command, destination);
+		assertThat(stompAuthenticationChannelInterceptor.preSend(message, messageChannel())).isSameAs(message);
+	}
+
+	private void assertRejected(StompCommand command, String destination) {
+		assertThatThrownBy(() -> stompAuthenticationChannelInterceptor.preSend(stompMessage(command, destination), messageChannel()))
+				.isInstanceOf(StompAuthorizationException.class);
+	}
+
+	private Message<?> stompMessage(StompCommand command, String destination) {
+		StompHeaders headers = new StompHeaders();
+		headers.setDestination(destination);
+		org.springframework.messaging.simp.stomp.StompHeaderAccessor accessor =
+				org.springframework.messaging.simp.stomp.StompHeaderAccessor.create(command);
+		accessor.setDestination(destination);
+		accessor.setUser(() -> "user-1");
+		return MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
+	}
+
+	private MessageChannel messageChannel() {
+		return (message, timeout) -> true;
 	}
 
 	private org.springframework.web.socket.WebSocketHttpHeaders webSocketHeaders(String sessionCookie) {

@@ -2,6 +2,7 @@ package com.joypeb.gateway.api.rest;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -36,6 +37,8 @@ class ChatRoomGatewayRouteTest {
 	private static final AtomicReference<String> forwardedUserId = new AtomicReference<>();
 	private static final AtomicReference<String> forwardedCookie = new AtomicReference<>();
 	private static final AtomicReference<String> forwardedBody = new AtomicReference<>();
+	private static final AtomicReference<String> forwardedPath = new AtomicReference<>();
+	private static final AtomicReference<String> forwardedQuery = new AtomicReference<>();
 
 	@Autowired
 	private WebApplicationContext webApplicationContext;
@@ -64,6 +67,8 @@ class ChatRoomGatewayRouteTest {
 		forwardedUserId.set(null);
 		forwardedCookie.set(null);
 		forwardedBody.set(null);
+		forwardedPath.set(null);
+		forwardedQuery.set(null);
 		mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext).build();
 	}
 
@@ -106,12 +111,48 @@ class ChatRoomGatewayRouteTest {
 				.andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));
 	}
 
+	@Test
+	void messageHistory_whenSessionExists_forwardsPathQueryAndAuthenticatedUser() throws Exception {
+		MvcResult loginResult = mockMvc.perform(post("/api/v1/sessions")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{"userId":"user-2"}
+								"""))
+				.andExpect(status().isCreated())
+				.andReturn();
+		MockHttpSession session = (MockHttpSession) loginResult.getRequest().getSession(false);
+
+		mockMvc.perform(get("/api/v1/chat-rooms/11111111-1111-1111-1111-111111111111/messages")
+						.session(session)
+						.header("X-User-Id", "spoofed-user")
+						.param("afterSequence", "1")
+						.param("size", "20"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.success").value(true));
+
+		assertThat(forwardedPath.get()).isEqualTo("/api/v1/chat-rooms/11111111-1111-1111-1111-111111111111/messages");
+		assertThat(forwardedQuery.get()).isEqualTo("afterSequence=1&size=20");
+		assertThat(forwardedUserId.get()).isEqualTo("user-2");
+		assertThat(forwardedCookie.get()).isNull();
+	}
+
 	private static void handleCreateChatRoom(HttpExchange exchange) throws IOException {
+		forwardedPath.set(exchange.getRequestURI().getPath());
+		forwardedQuery.set(exchange.getRequestURI().getQuery());
 		forwardedUserId.set(exchange.getRequestHeaders().getFirst("X-User-Id"));
 		forwardedCookie.set(exchange.getRequestHeaders().getFirst(HttpHeaders.COOKIE));
 		forwardedBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
 
-		byte[] response = """
+		String responseBody = ifMessageHistory(exchange)
+				? """
+				{
+				  "success": true,
+				  "data": [],
+				  "traceId": null,
+				  "timestamp": "2026-06-11T00:00:00Z"
+				}
+				"""
+				: """
 				{
 				  "success": true,
 				  "data": {
@@ -125,11 +166,20 @@ class ChatRoomGatewayRouteTest {
 				  "traceId": null,
 				  "timestamp": "2026-06-10T00:00:00Z"
 				}
-				""".getBytes(StandardCharsets.UTF_8);
+				""";
+		byte[] response = responseBody.getBytes(StandardCharsets.UTF_8);
 		exchange.getResponseHeaders().add(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE);
-		exchange.getResponseHeaders().add(HttpHeaders.LOCATION, "/api/v1/chat-rooms/11111111-1111-1111-1111-111111111111");
-		exchange.sendResponseHeaders(201, response.length);
+		int status = ifMessageHistory(exchange) ? 200 : 201;
+		if (!ifMessageHistory(exchange)) {
+			exchange.getResponseHeaders().add(HttpHeaders.LOCATION, "/api/v1/chat-rooms/11111111-1111-1111-1111-111111111111");
+		}
+		exchange.sendResponseHeaders(status, response.length);
 		exchange.getResponseBody().write(response);
 		exchange.close();
+	}
+
+	private static boolean ifMessageHistory(HttpExchange exchange) {
+		return "GET".equals(exchange.getRequestMethod())
+				&& exchange.getRequestURI().getPath().endsWith("/messages");
 	}
 }

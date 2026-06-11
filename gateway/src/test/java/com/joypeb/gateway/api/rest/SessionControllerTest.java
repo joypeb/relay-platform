@@ -1,9 +1,11 @@
 package com.joypeb.gateway.api.rest;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -11,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.web.servlet.MockMvc;
@@ -32,8 +35,20 @@ class SessionControllerTest {
 	}
 
 	@Test
+	void createSessionPreflight_whenOriginIsLocalhostPort_returnsCorsHeaders() throws Exception {
+		mockMvc.perform(options("/api/v1/sessions")
+						.header(HttpHeaders.ORIGIN, "http://localhost:63341")
+						.header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "POST")
+						.header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, "content-type"))
+				.andExpect(status().isOk())
+				.andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, "http://localhost:63341"))
+				.andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true"));
+	}
+
+	@Test
 	void createSession_whenUserIdIsValid_returnsCreatedSession() throws Exception {
 		mockMvc.perform(post("/api/v1/sessions")
+						.header(HttpHeaders.ORIGIN, "http://localhost:63341")
 						.header(TraceIdResolver.TRACE_ID_HEADER, "trace-login")
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
@@ -44,7 +59,9 @@ class SessionControllerTest {
 				.andExpect(jsonPath("$.data.userId").value("user-1"))
 				.andExpect(jsonPath("$.data.sessionId").isString())
 				.andExpect(jsonPath("$.traceId").value("trace-login"))
-				.andExpect(jsonPath("$.timestamp").isString());
+				.andExpect(jsonPath("$.timestamp").isString())
+				.andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, "http://localhost:63341"))
+				.andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true"));
 	}
 
 	@Test
