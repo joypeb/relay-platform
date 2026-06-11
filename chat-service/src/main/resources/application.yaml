@@ -5,6 +5,10 @@ spring:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/redis_chat}
     username: ${SPRING_DATASOURCE_USERNAME:redis_chat}
     password: ${SPRING_DATASOURCE_PASSWORD:redis_chat_password}
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
   jpa:
     hibernate:
       ddl-auto: validate
@@ -17,3 +21,8 @@ management:
     web:
       exposure:
         include: health,info,metrics
+
+chat:
+  messages:
+    redis:
+      stream-key: ${CHAT_MESSAGE_STREAM_KEY:stream:chat:message-created}

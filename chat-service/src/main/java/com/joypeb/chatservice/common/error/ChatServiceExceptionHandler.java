@@ -1,5 +1,6 @@
 package com.joypeb.chatservice.common.error;
 
+import com.joypeb.chatservice.chatmessage.application.ChatMessageContentInvalidException;
 import com.joypeb.chatservice.chatroom.application.ChatRoomMemberAlreadyExistsException;
 import com.joypeb.chatservice.chatroom.application.ChatRoomForbiddenException;
 import com.joypeb.chatservice.chatroom.application.ChatRoomNotFoundException;
@@ -43,6 +44,17 @@ public class ChatServiceExceptionHandler {
 		problem.setType(URI.create("https://joypeb.com/problems/chat-room-member-already-exists"));
 		problem.setProperty("code", "CHAT_ROOM_MEMBER_ALREADY_EXISTS");
 		return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
+	}
+
+	@ExceptionHandler(ChatMessageContentInvalidException.class)
+	public ResponseEntity<ProblemDetail> handleInvalidMessageContent(
+		ChatMessageContentInvalidException exception,
+		HttpServletRequest request
+	) {
+		ProblemDetail problem = problem(HttpStatus.BAD_REQUEST, "Chat message content invalid", exception.getMessage(), request);
+		problem.setType(URI.create("https://joypeb.com/problems/chat-message-content-invalid"));
+		problem.setProperty("code", "CHAT_MESSAGE_CONTENT_INVALID");
+		return ResponseEntity.badRequest().body(problem);
 	}
 
 	@ExceptionHandler({
