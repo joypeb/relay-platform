@@ -63,6 +63,17 @@ CHAT_SERVICE_BASE_URL=http://localhost:8081 ./gradlew bootRun
 
 `CHAT_SERVICE_BASE_URL`을 지정하지 않으면 gateway는 기본적으로 `http://localhost:8081`의 chat-service를 호출한다.
 
+### Run Browser Test HTML
+
+프로젝트 루트의 `chat-test.html`을 IDE preview server나 간단한 정적 서버로 열어 gateway `http://localhost:8080`을 호출할 수 있다.
+
+gateway의 REST CORS 기본값은 local browser tooling을 위해 다음 origin pattern을 허용한다.
+
+- `http://localhost:*`
+- `http://127.0.0.1:*`
+
+운영 환경이나 공유 개발 환경에서는 `gateway.cors.allowed-origin-patterns`를 신뢰할 수 있는 origin으로 제한한다.
+
 ## Test
 
 ```bash
@@ -82,3 +93,9 @@ cd gateway
 - chat-service: `CHAT_SERVICE_BASE_URL`이 실행 중인 chat-service 주소와 일치하는지 확인한다.
 - Redis: `docker compose logs redis`, `docker compose exec redis redis-cli ping`
 - PostgreSQL: `docker compose logs postgres`, `docker compose exec postgres pg_isready -U redis_chat -d redis_chat`
+
+### Browser Test HTML Fails To Fetch
+
+- gateway가 `http://localhost:8080`에서 실행 중인지 확인한다.
+- `chat-test.html`의 Gateway URL 값이 실제 gateway 주소와 일치하는지 확인한다.
+- 브라우저 개발자 도구에서 CORS 오류가 보이면 `gateway.cors.allowed-origin-patterns`에 HTML을 제공하는 origin이 포함되어 있는지 확인한다.
