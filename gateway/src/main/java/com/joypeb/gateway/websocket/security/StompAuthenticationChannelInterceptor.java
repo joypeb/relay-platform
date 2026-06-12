@@ -22,6 +22,10 @@ public class StompAuthenticationChannelInterceptor implements ChannelInterceptor
 			"^/app/chat-rooms/[0-9a-fA-F-]{36}/messages$"
 	);
 
+	private static final Pattern CHAT_ROOM_READ_RECEIPTS_SEND = Pattern.compile(
+			"^/app/chat-rooms/[0-9a-fA-F-]{36}/read-receipts$"
+	);
+
 	@Override
 	public Message<?> preSend(Message<?> message, MessageChannel channel) {
 		StompHeaderAccessor accessor = StompHeaderAccessor.wrap(message);
@@ -75,7 +79,8 @@ public class StompAuthenticationChannelInterceptor implements ChannelInterceptor
 		}
 
 		boolean allowed = destination.equals("/app/gateway/acks")
-				|| CHAT_ROOM_MESSAGES_SEND.matcher(destination).matches();
+				|| CHAT_ROOM_MESSAGES_SEND.matcher(destination).matches()
+				|| CHAT_ROOM_READ_RECEIPTS_SEND.matcher(destination).matches();
 		if (!allowed) {
 			throw new StompAuthorizationException("STOMP SEND destination is not allowed.");
 		}

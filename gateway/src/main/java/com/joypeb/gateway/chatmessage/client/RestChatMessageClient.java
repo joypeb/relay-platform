@@ -33,6 +33,22 @@ public class RestChatMessageClient implements ChatMessageClient {
 		return new SentMessage(message.id(), message.roomId(), message.sequence());
 	}
 
+	@Override
+	public AcceptedReadReceipt readReceipt(String actorId, UUID roomId, String requestId, String type, long lastReadSequence) {
+		ChatServiceReadReceiptApiResponse response = restClient.post()
+			.uri("/internal/chat-rooms/{roomId}/read-receipts", roomId)
+			.header(ACTOR_HEADER, actorId)
+			.contentType(MediaType.APPLICATION_JSON)
+			.body(new ChatServiceReadReceiptRequest(requestId, type, new ChatServiceReadReceiptRequest.Payload(lastReadSequence)))
+			.retrieve()
+			.body(ChatServiceReadReceiptApiResponse.class);
+		if (response == null || response.data() == null) {
+			throw new IllegalStateException("Chat service returned an empty read receipt response.");
+		}
+		ChatServiceReadReceiptResponse receipt = response.data();
+		return new AcceptedReadReceipt(receipt.roomId(), receipt.lastReadSequence());
+	}
+
 	private record ChatServiceMessageRequest(String requestId, String type, String content) {
 	}
 
@@ -40,5 +56,16 @@ public class RestChatMessageClient implements ChatMessageClient {
 	}
 
 	private record ChatServiceMessageResponse(UUID id, UUID roomId, long sequence) {
+	}
+
+	private record ChatServiceReadReceiptRequest(String requestId, String type, Payload payload) {
+		private record Payload(long lastReadSequence) {
+		}
+	}
+
+	private record ChatServiceReadReceiptApiResponse(ChatServiceReadReceiptResponse data) {
+	}
+
+	private record ChatServiceReadReceiptResponse(UUID roomId, long lastReadSequence) {
 	}
 }
