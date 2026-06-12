@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.verify;
 
 import com.joypeb.chatservice.chatmessage.dto.ChatMessageSendRequest;
+import com.joypeb.chatservice.chatread.application.ChatReadStateService;
 import com.joypeb.chatservice.chatroom.domain.ChatRoom;
 import com.joypeb.chatservice.chatroom.domain.ChatRoomMember;
 import com.joypeb.chatservice.chatroom.domain.ChatRoomVisibility;
@@ -31,6 +32,9 @@ class ChatMessageServiceTest {
 	@MockitoBean
 	ChatMessagePublisher chatMessagePublisher;
 
+	@MockitoBean
+	ChatReadStateService chatReadStateService;
+
 	@Test
 	void sendPublishesCreatedEventAfterCommit() {
 		Instant now = Instant.parse("2026-06-11T00:00:00Z");
@@ -45,5 +49,6 @@ class ChatMessageServiceTest {
 				&& event.payload().messageId().equals(response.id())
 				&& event.payload().roomId().equals(room.getId())
 		));
+		verify(chatReadStateService).recordMessageCommitted("user-1", room.getId(), 1);
 	}
 }

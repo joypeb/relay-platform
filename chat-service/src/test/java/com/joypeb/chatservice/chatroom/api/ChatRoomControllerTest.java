@@ -1,6 +1,7 @@
 package com.joypeb.chatservice.chatroom.api;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.joypeb.chatservice.chatread.application.ChatReadStateService;
 import com.joypeb.chatservice.chatroom.dto.ChatRoomCreateRequest;
 import com.joypeb.chatservice.chatroom.dto.ChatRoomUpdateRequest;
 import org.junit.jupiter.api.BeforeEach;
@@ -12,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -30,6 +32,9 @@ class ChatRoomControllerTest {
 
 	@Autowired
 	WebApplicationContext webApplicationContext;
+
+	@MockitoBean
+	ChatReadStateService chatReadStateService;
 
 	private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -72,6 +77,9 @@ class ChatRoomControllerTest {
 			.andExpect(jsonPath("$.success").value(true))
 			.andExpect(jsonPath("$.data.items", hasSize(1)))
 			.andExpect(jsonPath("$.data.items[0].name").value("public-room"))
+			.andExpect(jsonPath("$.data.items[0].lastMessageSequence").value(0))
+			.andExpect(jsonPath("$.data.items[0].lastReadSequence").value(0))
+			.andExpect(jsonPath("$.data.items[0].unreadCount").value(0))
 			.andExpect(jsonPath("$.data.page").value(0))
 			.andExpect(jsonPath("$.data.size").value(20))
 			.andExpect(jsonPath("$.data.totalElements").value(1));
