@@ -7,6 +7,7 @@ import com.joypeb.chatservice.chatmessage.dto.ChatMessageSendRequest;
 import com.joypeb.chatservice.chatmessage.event.ChatMessageCreatedEvent;
 import com.joypeb.chatservice.chatmessage.infrastructure.ChatMessageRepository;
 import com.joypeb.chatservice.chatmessage.infrastructure.ChatMessageSequenceRepository;
+import com.joypeb.chatservice.chatread.application.ChatReadStateService;
 import com.joypeb.chatservice.chatroom.application.ChatRoomForbiddenException;
 import com.joypeb.chatservice.chatroom.application.ChatRoomNotFoundException;
 import com.joypeb.chatservice.chatroom.infrastructure.ChatRoomMemberRepository;
@@ -29,6 +30,7 @@ public class ChatMessageService {
 	private final ChatMessageRepository chatMessageRepository;
 	private final ChatMessageSequenceRepository chatMessageSequenceRepository;
 	private final ChatMessagePublisher chatMessagePublisher;
+	private final ChatReadStateService chatReadStateService;
 	private final Clock clock;
 
 	public ChatMessageService(
@@ -37,6 +39,7 @@ public class ChatMessageService {
 		ChatMessageRepository chatMessageRepository,
 		ChatMessageSequenceRepository chatMessageSequenceRepository,
 		ChatMessagePublisher chatMessagePublisher,
+		ChatReadStateService chatReadStateService,
 		Clock clock
 	) {
 		this.chatRoomRepository = chatRoomRepository;
@@ -44,6 +47,7 @@ public class ChatMessageService {
 		this.chatMessageRepository = chatMessageRepository;
 		this.chatMessageSequenceRepository = chatMessageSequenceRepository;
 		this.chatMessagePublisher = chatMessagePublisher;
+		this.chatReadStateService = chatReadStateService;
 		this.clock = clock;
 	}
 
@@ -57,7 +61,7 @@ public class ChatMessageService {
 		Instant now = clock.instant();
 		ChatMessage message = ChatMessage.text(roomId, senderId, sequence.issue(), content, now);
 		ChatMessage saved = chatMessageRepository.save(message);
-		publishAfterCommit(saved, now);
+		afterCommit(saved, now);
 		return toResponse(saved);
 	}
 
@@ -97,7 +101,7 @@ public class ChatMessageService {
 		return normalized;
 	}
 
-	private void publishAfterCommit(ChatMessage saved, Instant occurredAt) {
+	private void afterCommit(ChatMessage saved, Instant occurredAt) {
 		ChatMessageCreatedEvent event = ChatMessageCreatedEvent.from(
 			UUID.randomUUID().toString(),
 			saved.getId(),
@@ -114,6 +118,7 @@ public class ChatMessageService {
 			@Override
 			public void afterCommit() {
 				chatMessagePublisher.publishCreated(event);
+				chatReadStateService.recordMessageCommitted(saved.getSenderId(), saved.getRoomId(), saved.getSequence());
 			}
 		});
 	}

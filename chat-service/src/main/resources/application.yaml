@@ -26,3 +26,10 @@ chat:
   messages:
     redis:
       stream-key: ${CHAT_MESSAGE_STREAM_KEY:stream:chat:message-created}
+  read-state:
+    flush-interval-ms: ${CHAT_READ_STATE_FLUSH_INTERVAL_MS:30000}
+    redis:
+      room-last-sequence-key-pattern: ${CHAT_READ_STATE_ROOM_LAST_SEQUENCE_KEY_PATTERN:chat:room:%s:last-sequence}
+      user-room-read-sequences-key-pattern: ${CHAT_READ_STATE_USER_ROOM_READ_SEQUENCES_KEY_PATTERN:chat:user:%s:room-read-sequences}
+      dirty-set-key: ${CHAT_READ_STATE_DIRTY_SET_KEY:chat:read-state:dirty}
+      flush-batch-size: ${CHAT_READ_STATE_FLUSH_BATCH_SIZE:500}

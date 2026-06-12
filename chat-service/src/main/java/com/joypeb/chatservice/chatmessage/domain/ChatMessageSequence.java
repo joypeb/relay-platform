@@ -38,4 +38,8 @@ public class ChatMessageSequence {
 	public UUID getRoomId() {
 		return roomId;
 	}
+
+	public long getNextSequence() {
+		return nextSequence;
+	}
 }

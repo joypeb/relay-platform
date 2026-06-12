@@ -10,6 +10,7 @@ import com.joypeb.chatservice.chatroom.dto.ChatRoomMemberResponse;
 import com.joypeb.chatservice.chatroom.dto.ChatRoomResponse;
 import com.joypeb.chatservice.chatroom.dto.ChatRoomSummaryResponse;
 import com.joypeb.chatservice.chatroom.dto.ChatRoomUpdateRequest;
+import com.joypeb.chatservice.chatread.application.ChatReadStateService;
 import com.joypeb.chatservice.chatroom.infrastructure.ChatRoomMemberRepository;
 import com.joypeb.chatservice.chatroom.infrastructure.ChatRoomRepository;
 import com.joypeb.chatservice.common.api.PageResponse;
@@ -27,15 +28,18 @@ public class ChatRoomService {
 
 	private final ChatRoomRepository chatRoomRepository;
 	private final ChatRoomMemberRepository chatRoomMemberRepository;
+	private final ChatReadStateService chatReadStateService;
 	private final Clock clock;
 
 	public ChatRoomService(
 		ChatRoomRepository chatRoomRepository,
 		ChatRoomMemberRepository chatRoomMemberRepository,
+		ChatReadStateService chatReadStateService,
 		Clock clock
 	) {
 		this.chatRoomRepository = chatRoomRepository;
 		this.chatRoomMemberRepository = chatRoomMemberRepository;
+		this.chatReadStateService = chatReadStateService;
 		this.clock = clock;
 	}
 
@@ -60,7 +64,12 @@ public class ChatRoomService {
 			case PUBLIC -> chatRoomRepository.findByDeletedAtIsNullAndVisibility(ChatRoomVisibility.PUBLIC, pageable);
 			case JOINED -> chatRoomRepository.findJoinedRooms(actorId, pageable);
 		};
-		Page<ChatRoomSummaryResponse> summaries = rooms.map(room -> toSummary(room, memberCount(room.getId())));
+		Page<ChatRoomSummaryResponse> summaries = rooms.map(room -> {
+			long lastMessageSequence = chatReadStateService.resolveRoomLastSequence(room.getId());
+			long lastReadSequence = chatReadStateService.resolveUserReadSequence(actorId, room.getId());
+			long unreadCount = Math.max(0, lastMessageSequence - lastReadSequence);
+			return toSummary(room, memberCount(room.getId()), lastMessageSequence, lastReadSequence, unreadCount);
+		});
 		return PageResponse.from(summaries);
 	}
 
@@ -122,7 +131,13 @@ public class ChatRoomService {
 		);
 	}
 
-	private ChatRoomSummaryResponse toSummary(ChatRoom room, long memberCount) {
+	private ChatRoomSummaryResponse toSummary(
+		ChatRoom room,
+		long memberCount,
+		long lastMessageSequence,
+		long lastReadSequence,
+		long unreadCount
+	) {
 		return new ChatRoomSummaryResponse(
 			room.getId(),
 			room.getName(),
@@ -130,6 +145,9 @@ public class ChatRoomService {
 			room.getOwnerId(),
 			room.getVisibility(),
 			memberCount,
+			lastMessageSequence,
+			lastReadSequence,
+			unreadCount,
 			room.getCreatedAt()
 		);
 	}

@@ -11,6 +11,9 @@ public record ChatRoomSummaryResponse(
 	String ownerId,
 	ChatRoomVisibility visibility,
 	long memberCount,
+	long lastMessageSequence,
+	long lastReadSequence,
+	long unreadCount,
 	Instant createdAt
 ) {
 }

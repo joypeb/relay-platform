@@ -1,6 +1,7 @@
 package com.joypeb.chatservice.common.error;
 
 import com.joypeb.chatservice.chatmessage.application.ChatMessageContentInvalidException;
+import com.joypeb.chatservice.chatread.application.ChatReadSequenceOutOfRangeException;
 import com.joypeb.chatservice.chatroom.application.ChatRoomMemberAlreadyExistsException;
 import com.joypeb.chatservice.chatroom.application.ChatRoomForbiddenException;
 import com.joypeb.chatservice.chatroom.application.ChatRoomNotFoundException;
@@ -55,6 +56,17 @@ public class ChatServiceExceptionHandler {
 		problem.setType(URI.create("https://joypeb.com/problems/chat-message-content-invalid"));
 		problem.setProperty("code", "CHAT_MESSAGE_CONTENT_INVALID");
 		return ResponseEntity.badRequest().body(problem);
+	}
+
+	@ExceptionHandler(ChatReadSequenceOutOfRangeException.class)
+	public ResponseEntity<ProblemDetail> handleReadSequenceOutOfRange(
+		ChatReadSequenceOutOfRangeException exception,
+		HttpServletRequest request
+	) {
+		ProblemDetail problem = problem(HttpStatus.UNPROCESSABLE_ENTITY, "Chat read sequence out of range", exception.getMessage(), request);
+		problem.setType(URI.create("https://joypeb.com/problems/chat-read-sequence-out-of-range"));
+		problem.setProperty("code", "CHAT_READ_SEQUENCE_OUT_OF_RANGE");
+		return ResponseEntity.unprocessableEntity().body(problem);
 	}
 
 	@ExceptionHandler({
