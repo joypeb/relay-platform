@@ -601,6 +601,10 @@
               <span>Selected</span>
               <code id="selectedRoomId">-</code>
             </div>
+            <div class="meta-line">
+              <span>Sequences</span>
+              <code id="selectedRoomSequences">last=0 · read=0 · unread=0</code>
+            </div>
           </div>
           <div id="roomList" class="room-list">
             <div class="empty">채팅방을 조회하거나 생성하세요.</div>
@@ -644,6 +648,14 @@
                 <textarea id="messageContent" maxlength="2000">hello from browser</textarea>
               </label>
               <button id="sendMessage" class="success" type="button">전송</button>
+            </div>
+            <div class="form-row">
+              <label class="grow">
+                lastReadSequence
+                <input id="lastReadSequence" type="number" min="0" value="0">
+              </label>
+              <button id="useLatestSequence" class="secondary" type="button">최신값</button>
+              <button id="sendReadReceipt" class="success" type="button">읽음 ACK</button>
             </div>
           </div>
         </div>
@@ -700,6 +712,7 @@
       updateRoom: $("updateRoom"),
       deleteRoom: $("deleteRoom"),
       selectedRoomId: $("selectedRoomId"),
+      selectedRoomSequences: $("selectedRoomSequences"),
       roomList: $("roomList"),
       connectStomp: $("connectStomp"),
       disconnectStomp: $("disconnectStomp"),
@@ -710,6 +723,9 @@
       messageList: $("messageList"),
       messageContent: $("messageContent"),
       sendMessage: $("sendMessage"),
+      lastReadSequence: $("lastReadSequence"),
+      useLatestSequence: $("useLatestSequence"),
+      sendReadReceipt: $("sendReadReceipt"),
       afterSequence: $("afterSequence"),
       historySize: $("historySize"),
       clearLog: $("clearLog"),
@@ -924,7 +940,10 @@
       return {
         ...room,
         visibility,
-        publiclyVisible: visibility === "PUBLIC"
+        publiclyVisible: visibility === "PUBLIC",
+        lastMessageSequence: Number(room?.lastMessageSequence || 0),
+        lastReadSequence: Number(room?.lastReadSequence || 0),
+        unreadCount: Number(room?.unreadCount || 0)
       };
     }
 
@@ -945,10 +964,20 @@
           </div>
           <div class="room-sub">${escapeHtml(room.description || "")}</div>
           <div class="room-sub">owner: ${escapeHtml(room.ownerId || "-")} · members: ${escapeHtml(room.memberCount ?? "-")}</div>
+          <div class="room-sub">last: ${escapeHtml(room.lastMessageSequence ?? 0)} · read: ${escapeHtml(room.lastReadSequence ?? 0)} · unread: ${escapeHtml(room.unreadCount ?? 0)}</div>
           <div class="room-sub"><code>${escapeHtml(room.id)}</code></div>
         `;
-        item.addEventListener("click", () => selectRoom(room));
+        item.addEventListener("click", () => run(() => openRoom(room)));
         elements.roomList.appendChild(item);
+      }
+    }
+
+    async function openRoom(room) {
+      selectRoom(room);
+      try {
+        await loadHistory();
+      } finally {
+        connectOrSubscribeSelectedRoom();
       }
     }
 
@@ -956,12 +985,29 @@
       room = normalizeRoom(room);
       state.selectedRoom = room;
       elements.selectedRoomId.textContent = room.id;
+      elements.selectedRoomSequences.textContent = `last=${room.lastMessageSequence || 0} · read=${room.lastReadSequence || 0} · unread=${room.unreadCount || 0}`;
+      elements.lastReadSequence.value = String(room.lastReadSequence || 0);
       elements.roomName.value = room.name || "";
       elements.roomDescription.value = room.description || "";
       elements.roomPublic.checked = room.publiclyVisible;
       renderRooms();
       renderMessages([]);
       log("rest", "채팅방 선택", room);
+    }
+
+    function connectOrSubscribeSelectedRoom() {
+      if (!state.selectedRoom) {
+        return;
+      }
+      if (state.stompClient?.connected) {
+        subscribeRoom();
+        return;
+      }
+      if (state.stompClient?.active) {
+        log("stomp", "STOMP 연결 대기", wsUrl());
+        return;
+      }
+      connectStomp();
     }
 
     function connectStomp() {
@@ -1045,6 +1091,7 @@
           if (event?.payload?.requestId) {
             state.pendingRequests.delete(event.payload.requestId);
           }
+          applyAck(event);
         });
         log("stomp", "SUBSCRIBE /user/queue/chat/acks");
       }
@@ -1117,6 +1164,45 @@
       });
     }
 
+    function useLatestSequence() {
+      if (!state.selectedRoom) {
+        log("error", "최신 sequence 선택 실패", "선택된 채팅방이 없습니다.");
+        return;
+      }
+      elements.lastReadSequence.value = String(state.selectedRoom.lastMessageSequence || 0);
+    }
+
+    function sendReadReceipt() {
+      if (!state.selectedRoom) {
+        log("error", "읽음 ACK 실패", "선택된 채팅방이 없습니다.");
+        return;
+      }
+      if (!state.stompClient?.connected) {
+        log("error", "읽음 ACK 실패", "STOMP 연결이 필요합니다.");
+        return;
+      }
+      const sequence = Number(elements.lastReadSequence.value || 0);
+      if (!Number.isInteger(sequence) || sequence < 0) {
+        log("error", "읽음 ACK 실패", "lastReadSequence는 0 이상의 정수여야 합니다.");
+        return;
+      }
+      const destination = `/app/chat-rooms/${state.selectedRoom.id}/read-receipts`;
+      const requestId = uuid();
+      const body = {
+        requestId,
+        type: "CHAT_MESSAGES_READ",
+        payload: { lastReadSequence: sequence },
+        sentAt: now()
+      };
+      state.pendingRequests.set(requestId, { roomId: state.selectedRoom.id, lastReadSequence: sequence });
+      log("stomp", `SEND ${destination}`, body);
+      state.stompClient.publish({
+        destination,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body)
+      });
+    }
+
     function handleStompMessage(label, message, asError = false) {
       let body = message.body;
       try {
@@ -1129,6 +1215,23 @@
         body
       });
       return body;
+    }
+
+    function applyAck(event) {
+      if (!event?.payload || !state.selectedRoom) {
+        return;
+      }
+      if (event.type === "CHAT_MESSAGE_ACCEPTED" && event.payload.roomId === state.selectedRoom.id) {
+        state.selectedRoom.lastMessageSequence = Math.max(state.selectedRoom.lastMessageSequence || 0, event.payload.sequence || 0);
+        state.selectedRoom.lastReadSequence = Math.max(state.selectedRoom.lastReadSequence || 0, event.payload.sequence || 0);
+      }
+      if (event.type === "CHAT_MESSAGES_READ_ACCEPTED" && event.payload.roomId === state.selectedRoom.id) {
+        state.selectedRoom.lastReadSequence = Math.max(state.selectedRoom.lastReadSequence || 0, event.payload.lastReadSequence || 0);
+      }
+      state.selectedRoom.unreadCount = Math.max(0, (state.selectedRoom.lastMessageSequence || 0) - (state.selectedRoom.lastReadSequence || 0));
+      upsertRoom(state.selectedRoom);
+      elements.selectedRoomSequences.textContent = `last=${state.selectedRoom.lastMessageSequence || 0} · read=${state.selectedRoom.lastReadSequence || 0} · unread=${state.selectedRoom.unreadCount || 0}`;
+      elements.lastReadSequence.value = String(state.selectedRoom.lastReadSequence || 0);
     }
 
     function renderMessages(messages) {
@@ -1219,6 +1322,8 @@
       elements.inviteMember.addEventListener("click", () => run(inviteMember));
       elements.loadHistory.addEventListener("click", () => run(loadHistory));
       elements.sendMessage.addEventListener("click", sendMessage);
+      elements.useLatestSequence.addEventListener("click", useLatestSequence);
+      elements.sendReadReceipt.addEventListener("click", sendReadReceipt);
       elements.clearLog.addEventListener("click", () => {
         elements.logBox.innerHTML = "";
       });
