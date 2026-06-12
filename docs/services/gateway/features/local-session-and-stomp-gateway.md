@@ -33,6 +33,14 @@ gateway는 개발과 테스트를 위해 `userId`만 받는 로컬 로그인 세
 6. 각 gateway instance의 `ChatMessageStreamConsumer`가 자기 consumer group으로 같은 stream event를 읽는다.
 7. gateway는 자기 instance에 연결된 client에게 `/topic/chat-rooms/{roomId}/messages`로 `CHAT_MESSAGE_CREATED`를 broadcast한다.
 
+### 채팅 읽음 ACK STOMP 전송
+
+1. 클라이언트가 `/app/chat-rooms/{roomId}/read-receipts`로 읽음 ACK를 전송한다.
+2. `ChatMessageStompController`가 authenticated principal, room id, payload를 확인한다.
+3. gateway가 `POST /internal/chat-rooms/{roomId}/read-receipts`로 chat-service에 위임한다.
+4. chat-service가 Redis read sequence를 단조 증가 방식으로 반영한다.
+5. gateway는 `/user/queue/chat/acks`로 `CHAT_MESSAGES_READ_ACCEPTED` ACK를 반환한다.
+
 ### 채팅방 REST Routing
 
 1. 클라이언트가 gateway 세션 cookie를 포함해 `POST|GET|PATCH|DELETE /api/v1/chat-rooms...`를 호출한다.
@@ -82,6 +90,20 @@ sequenceDiagram
 sequenceDiagram
     participant Client
     participant Gateway
+    participant ChatService as chat-service
+    participant Redis
+
+    Client->>Gateway: SEND /app/chat-rooms/{roomId}/read-receipts
+    Gateway->>ChatService: POST /internal/chat-rooms/{roomId}/read-receipts + X-User-Id
+    ChatService->>Redis: HSET max read sequence + SADD dirty
+    ChatService-->>Gateway: 202 ChatReadReceiptResponse
+    Gateway-->>Client: MESSAGE /user/queue/chat/acks
+```
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Gateway
     participant Session
     participant ChatService as chat-service
 
@@ -104,7 +126,7 @@ sequenceDiagram
 - `/api/v1/**` REST CORS는 `gateway.cors.allowed-origin-patterns`에 맞는 origin만 허용하고, session cookie 전송을 위해 credentials를 허용한다.
 - WebSocket handshake에 인증 세션이 없으면 `401 Unauthorized`로 거부한다.
 - STOMP `SUBSCRIBE`는 `/topic/chat-rooms/{roomId}/messages`, `/user/queue/chat/acks`, `/user/queue/chat/errors`, `/user/queue/gateway/acks`만 허용한다.
-- STOMP `SEND`는 `/app/gateway/acks`, `/app/chat-rooms/{roomId}/messages`만 허용한다.
+- STOMP `SEND`는 `/app/gateway/acks`, `/app/chat-rooms/{roomId}/messages`, `/app/chat-rooms/{roomId}/read-receipts`만 허용한다.
 - gateway는 채팅방 멤버십, 메시지 저장, Redis Stream publish 같은 채팅 도메인 로직을 처리하지 않는다.
 - Redis Stream consumer group은 gateway instance별로 `gateway-broadcast-{instanceId}`를 사용해 모든 gateway가 같은 메시지 생성 이벤트를 읽도록 한다.
 
@@ -174,9 +196,35 @@ sequenceDiagram
   - `SUBSCRIBE /user/queue/gateway/acks`
 - 채팅 메시지 destination:
   - `SEND /app/chat-rooms/{roomId}/messages`
+  - `SEND /app/chat-rooms/{roomId}/read-receipts`
   - `SUBSCRIBE /topic/chat-rooms/{roomId}/messages`
   - `SUBSCRIBE /user/queue/chat/acks`
   - `SUBSCRIBE /user/queue/chat/errors`
+- 읽음 ACK request payload:
+  ```json
+  {
+    "requestId": "read-1",
+    "type": "CHAT_MESSAGES_READ",
+    "payload": {
+      "lastReadSequence": 3
+    },
+    "sentAt": "2026-06-12T00:00:00Z"
+  }
+  ```
+- 읽음 ACK success event:
+  ```json
+  {
+    "eventId": "event-id",
+    "type": "CHAT_MESSAGES_READ_ACCEPTED",
+    "payload": {
+      "requestId": "read-1",
+      "roomId": "00000000-0000-0000-0000-000000000000",
+      "lastReadSequence": 3
+    },
+    "occurredAt": "2026-06-12T00:00:00Z",
+    "traceId": "trace-id"
+  }
+  ```
 
 ### Redis Stream
 
@@ -219,7 +267,7 @@ sequenceDiagram
   - chat-service의 `201 Created`, `Location`, JSON body가 gateway 응답으로 반환된다.
   - 메시지 history REST 요청은 path와 query string을 유지하고 session user id를 `X-User-Id`로 전달한다.
   - 인증되지 않은 chat-room REST 호출은 `401 UNAUTHENTICATED`로 거부된다.
-- `ChatMessageStompControllerTest`에서 STOMP 메시지 전송이 chat-service client로 forwarding되고 `/user/queue/chat/acks` payload가 생성되는지 검증한다.
+- `ChatMessageStompControllerTest`에서 STOMP 메시지 전송과 읽음 ACK가 chat-service client로 forwarding되고 `/user/queue/chat/acks` payload가 생성되는지 검증한다.
 - `ChatMessageStreamConsumerTest`에서 Redis Stream payload가 `/topic/chat-rooms/{roomId}/messages` broadcast와 ACK로 매핑되는지, stream key가 없어도 consumer group을 생성하는지 검증한다.
 - WebSocket/STOMP는 `GatewayWebSocketIntegrationTest`에서 실제 random port로 검증한다.
 - 검증한 흐름:
@@ -242,6 +290,7 @@ sequenceDiagram
 - chat-room REST routing은 수동 controller 대신 Spring Cloud Gateway Server MVC의 `RouterFunction`, `HandlerFunctions.http()`, route filter로 구현한다.
 - gateway는 채팅방 REST 요청에서 인증 사용자 ID를 header로 전파하되, 채팅방 소유권이나 멤버십 같은 도메인 판단은 chat-service에 남긴다.
 - gateway는 연결, 인증 경계, STOMP ingress, local WebSocket broadcast만 담당하고, 채팅 메시지 저장과 Redis Stream publish는 chat-service 책임으로 남긴다.
+- gateway는 읽음 ACK도 상태를 직접 저장하지 않고 chat-service 내부 REST API로 위임한다. Redis key, DB flush, unread count 계산은 chat-service 책임이다.
 - 다중 gateway broadcast를 위해 공유 consumer group을 쓰지 않고 gateway instance별 consumer group을 사용한다.
 - gateway가 chat-service보다 먼저 시작되는 로컬/운영 순서를 허용하기 위해 Redis Stream consumer group 생성에 `MKSTREAM`을 사용한다. 이 방식은 빈 stream key를 만들 수 있지만, 첫 메시지 발행 전 consumer 시작 실패를 막아 realtime broadcast 가용성을 높인다.
 - REST와 STOMP adapter, DTO, WebSocket/STOMP 인프라를 하위 패키지로 분리해 transport 계약과 protocol 인프라 책임이 섞이지 않도록 했다.
